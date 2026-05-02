@@ -1,0 +1,18 @@
+{
+  "name": "knowflow-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end tests for KnowFlow using Playwright",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.0",
+    "@types/node": "^20.12.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,24 +1,85 @@
-# Nestjs specific
-/dist
-/node_modules
-/build
-/tmp
+# =============================================================================
+# KnowFlow – .gitignore
+# =============================================================================
 
-# Logs
-logs
-*.log
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Environment / Secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.Python
+pip-log.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
 npm-debug.log*
-pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
+pnpm-debug.log*
+.pnpm-store/
+.npm/
+.yarn/
 
-# dotenv environment variable files
-.env
-.env.development
-.env.test
-.env.production
+# ── Vite build output ─────────────────────────────────────────────────────────
+frontend/dist/
+frontend/.vite/
 
-# temp directory
-.temp
-.tmp
+# ── Docker overrides ─────────────────────────────────────────────────────────
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ── Uploads / Local data ─────────────────────────────────────────────────────
+backend/uploads/
+*.sqlite
+*.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Temp ─────────────────────────────────────────────────────────────────────
+.temp/
+.tmp/
+tmp/
+*.bak
+*.orig

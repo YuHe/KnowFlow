@@ -1,0 +1,36 @@
+"""Routers package — all FastAPI router modules for KnowFlow."""
+from app.routers import (
+    admin,
+    assets,
+    auth,
+    comments,
+    docs,
+    favorites,
+    import_,
+    kb,
+    public,
+    search,
+    sections,
+    shares,
+    templates,
+    users,
+    versions,
+)
+
+__all__ = [
+    "admin",
+    "assets",
+    "auth",
+    "comments",
+    "docs",
+    "favorites",
+    "import_",
+    "kb",
+    "public",
+    "search",
+    "sections",
+    "shares",
+    "templates",
+    "users",
+    "versions",
+]
