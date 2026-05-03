@@ -19,6 +19,7 @@ const KbCreateDialog: React.FC<KbCreateDialogProps> = ({ open, onClose, onCreate
     name: '',
     description: '',
     icon: '📚',
+    icon_url: null,
     visibility: 'private',
   })
   const [nameError, setNameError] = useState('')
