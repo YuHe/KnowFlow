@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useKbStore } from '@/store/kbStore';
 import { useDocStore } from '@/store/docStore';
 import { useTreeStore } from '@/store/treeStore';
-import DocTree from '@/components/tree/DocTree';
+import { docsApi } from '@/api/docs';
 
 const KbHomePage: React.FC = () => {
   const { kbId } = useParams<{ kbId: string }>();
@@ -11,6 +11,19 @@ const KbHomePage: React.FC = () => {
   const { currentKb, fetchKbById, isLoadingKbs: kbLoading } = useKbStore();
   const { recentDocs, fetchRecentKbDocs } = useDocStore();
   const { selectedNodeId, selectNode, fetchTree } = useTreeStore();
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleCreateDoc = async () => {
+    if (!kbId || isCreating) return;
+    setIsCreating(true);
+    try {
+      const doc = await docsApi.createDoc(kbId, { title: '无标题文档', content_md: '' });
+      await fetchTree(kbId);
+      navigate(`/kb/${kbId}/docs/${doc.id}/edit`);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   useEffect(() => {
     if (kbId) {
@@ -37,30 +50,8 @@ const KbHomePage: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full bg-background overflow-hidden">
-      {/* Left Sidebar - Doc Tree */}
-      <aside className="w-64 border-r flex flex-col flex-shrink-0 bg-muted/20">
-        <div className="px-4 py-3 border-b bg-background">
-          <div className="flex items-center gap-2">
-            <Link to="/" className="text-muted-foreground hover:text-foreground transition">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-lg">{currentKb?.icon || '📚'}</span>
-              <span className="text-sm font-semibold truncate">{currentKb?.name}</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {kbId && <DocTree kbId={kbId} />}
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-8 py-12">
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-3xl mx-auto px-8 py-12">
           <div className="text-center mb-12">
             <div className="text-6xl mb-4">{currentKb?.icon || '📚'}</div>
             <h1 className="text-3xl font-bold mb-3">{currentKb?.name}</h1>
@@ -80,8 +71,9 @@ const KbHomePage: React.FC = () => {
 
           <div className="flex items-center justify-center gap-3 mb-12">
             <button
-              onClick={() => navigate(`/kb/${kbId}/docs/new`)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition"
+              onClick={handleCreateDoc}
+              disabled={isCreating}
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition disabled:opacity-50"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -125,7 +117,6 @@ const KbHomePage: React.FC = () => {
             </section>
           )}
         </div>
-      </main>
     </div>
   );
 };

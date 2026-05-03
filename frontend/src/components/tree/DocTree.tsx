@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTreeStore } from '@/store/treeStore'
+import { docsApi } from '@/api/docs'
 import TreeNode from './TreeNode'
 
 interface DocTreeProps {
@@ -20,6 +21,19 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
   } = useTreeStore()
 
   const navigate = useNavigate()
+  const [isCreating, setIsCreating] = useState(false)
+
+  const handleCreateDoc = async () => {
+    if (isCreating) return
+    setIsCreating(true)
+    try {
+      const doc = await docsApi.createDoc(kbId, { title: '无标题文档', content_md: '' })
+      await fetchTree(kbId)
+      navigate(`/kb/${kbId}/docs/${doc.id}/edit`)
+    } finally {
+      setIsCreating(false)
+    }
+  }
 
   useEffect(() => {
     fetchTree(kbId)
@@ -50,8 +64,9 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
       {!readOnly && (
         <div className="flex items-center gap-1 px-3 pb-2">
           <button
-            onClick={() => navigate(`/kb/${kbId}/docs/new`)}
-            className="flex-1 flex items-center gap-1 justify-center py-1.5 text-xs text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-lg transition border border-dashed border-border hover:border-primary/40"
+            onClick={handleCreateDoc}
+            disabled={isCreating}
+            className="flex-1 flex items-center gap-1 justify-center py-1.5 text-xs text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-lg transition border border-dashed border-border hover:border-primary/40 disabled:opacity-50"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

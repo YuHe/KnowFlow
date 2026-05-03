@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, Link } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, MessageSquare, Clock, AlignLeft, Share2 } from 'lucide-react'
@@ -6,12 +6,13 @@ import { useUiStore } from '@/store/uiStore'
 import { useKbStore } from '@/store/kbStore'
 import { useTreeStore } from '@/store/treeStore'
 import { cn } from '@/utils'
+import DocTree from '@/components/tree/DocTree'
 
 export function KbLayout() {
   const { kbId } = useParams<{ kbId: string }>()
-  const { sidebarOpen, outlineOpen, commentPanelOpen, versionPanelOpen, toggleSidebar, openRightPanel } =
+  const { sidebarOpen, outlineOpen, commentPanelOpen, versionPanelOpen, toggleSidebar, openRightPanel, closeAllPanels } =
     useUiStore()
-  const { fetchKbById } = useKbStore()
+  const { currentKb, fetchKbById } = useKbStore()
   const { fetchTree } = useTreeStore()
 
   const isRightPanelOpen = outlineOpen || commentPanelOpen || versionPanelOpen
@@ -32,8 +33,18 @@ export function KbLayout() {
           sidebarOpen ? 'w-[260px]' : 'w-0 overflow-hidden border-r-0',
         )}
       >
+        {/* KB header */}
+        <div className="px-4 py-3 border-b bg-background flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Link to="/" className="text-muted-foreground hover:text-foreground transition">
+              <ChevronLeft className="w-4 h-4" />
+            </Link>
+            <span className="text-lg">{currentKb?.icon || '📚'}</span>
+            <span className="text-sm font-semibold truncate flex-1 min-w-0">{currentKb?.name}</span>
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto">
-          <Outlet context={{ panel: 'sidebar' }} />
+          {kbId && <DocTree kbId={kbId} />}
         </div>
       </aside>
 
@@ -62,7 +73,7 @@ export function KbLayout() {
           {/* Tab buttons */}
           <div className="flex w-10 flex-col items-center border-r py-4 gap-1">
             <button
-              onClick={() => openRightPanel('outline')}
+              onClick={() => outlineOpen ? closeAllPanels() : openRightPanel('outline')}
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
                 outlineOpen
@@ -75,7 +86,7 @@ export function KbLayout() {
               <AlignLeft className="h-4 w-4" />
             </button>
             <button
-              onClick={() => openRightPanel('comments')}
+              onClick={() => commentPanelOpen ? closeAllPanels() : openRightPanel('comments')}
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
                 commentPanelOpen
@@ -88,7 +99,7 @@ export function KbLayout() {
               <MessageSquare className="h-4 w-4" />
             </button>
             <button
-              onClick={() => openRightPanel('versions')}
+              onClick={() => versionPanelOpen ? closeAllPanels() : openRightPanel('versions')}
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
                 versionPanelOpen
