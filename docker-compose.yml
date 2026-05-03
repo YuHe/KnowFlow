@@ -54,7 +54,7 @@ services:
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
       STORAGE_LOCAL_PATH: /app/uploads
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-104857600}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8192,https://knowflow.ihope.cc}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8192,https://ku.ihope.cc}
       ENVIRONMENT: ${ENVIRONMENT:-production}
     volumes:
       - uploads_data:/app/uploads

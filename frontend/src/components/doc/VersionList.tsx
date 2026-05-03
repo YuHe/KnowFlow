@@ -10,6 +10,7 @@ interface VersionListProps {
   docId: string
   kbId: string
   onClose: () => void
+  onRestore?: () => Promise<void>
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -18,7 +19,7 @@ const REASON_LABELS: Record<string, string> = {
   pre_restore: '恢复前快照',
 }
 
-export default function VersionList({ docId, onClose }: VersionListProps) {
+export default function VersionList({ docId, onClose, onRestore }: VersionListProps) {
   const [versions, setVersions] = useState<DocumentVersion[]>([])
   const [loading, setLoading] = useState(true)
   const [restoringId, setRestoringId] = useState<string | null>(null)
@@ -50,6 +51,8 @@ export default function VersionList({ docId, onClose }: VersionListProps) {
       toast({ title: `已恢复到版本 v${version.version_num}` })
       await loadVersions()
       setPreviewVersion(null)
+      // Notify parent to reload the document content
+      await onRestore?.()
     } catch {
       toast({ title: '恢复版本失败', variant: 'destructive' })
     } finally {

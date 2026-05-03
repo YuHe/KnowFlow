@@ -52,7 +52,8 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     try {
       const doc = await docsApi.createDoc(kbId, { title: '无标题文档', content_md: '' })
       await fetchTree(kbId)
-      navigate(`/kb/${kbId}/docs/${doc.id}/edit`)
+      // Navigate to doc page and auto-enter edit mode
+      navigate(`/kb/${kbId}/docs/${doc.id}`, { state: { startEditing: true } })
     } finally {
       setIsCreating(false)
     }
@@ -87,7 +88,7 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
         section_id: sectionId,
       })
       await fetchTree(kbId)
-      navigate(`/kb/${kbId}/docs/${doc.id}/edit`)
+      navigate(`/kb/${kbId}/docs/${doc.id}`, { state: { startEditing: true } })
     } catch {
       // ignore
     }

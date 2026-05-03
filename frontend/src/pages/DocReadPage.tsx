@@ -1,8 +1,14 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import type { Editor } from '@tiptap/react';
 import { useDocStore } from '@/store/docStore';
 import { useKbStore } from '@/store/kbStore';
 import { favoritesApi } from '@/api/favorites';
+import { docsApi } from '@/api/docs';
+import { htmlToMarkdown } from '@/components/editor/EditorCore';
+import EditorCore from '@/components/editor/EditorCore';
+import EditorToolbar from '@/components/editor/EditorToolbar';
+import { useAutoSave } from '@/hooks/useAutoSave';
 import DocViewer from '@/components/doc/DocViewer';
 import OutlinePanel from '@/components/doc/OutlinePanel';
 import CommentPanel from '@/components/doc/CommentPanel';
@@ -14,22 +20,136 @@ import { toast } from '@/components/ui/use-toast';
 
 type PanelType = 'comments' | 'share' | 'versions' | null;
 
+const saveStatusLabels: Record<string, string> = {
+  idle: '',
+  saved: '已保存',
+  saving: '保存中...',
+  unsaved: '未保存',
+  error: '保存失败',
+};
+const saveStatusColors: Record<string, string> = {
+  idle: 'text-muted-foreground',
+  saved: 'text-green-600',
+  saving: 'text-blue-500',
+  unsaved: 'text-orange-500',
+  error: 'text-red-500',
+};
+
+const ZOOM_LEVELS = [50, 75, 90, 100, 110, 125, 150, 175, 200];
+
 const DocReadPage: React.FC = () => {
   const { kbId, docId } = useParams<{ kbId: string; docId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentDoc, fetchDoc, isLoading } = useDocStore();
   const { currentKb } = useKbStore();
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // ── Read-mode state ────────────────────────────────────────────────
   const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [showOutline, setShowOutline] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
 
+  // ── Edit-mode state ────────────────────────────────────────────────
+  const [isEditing, setIsEditing] = useState(false);
+  const [title, setTitle] = useState('');
+  const [initialContent, setInitialContent] = useState('');
+  const [wordCount, setWordCount] = useState(0);
+  const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const [sourceMode, setSourceMode] = useState(false);
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  // Track the HTML at the last manual-save point to detect duplicates
+  const lastSavedHtmlRef = useRef('');
+
+  // ── Load document ──────────────────────────────────────────────────
   useEffect(() => {
-    if (kbId && docId) {
-      fetchDoc(kbId, docId);
-    }
+    if (kbId && docId) fetchDoc(kbId, docId);
   }, [kbId, docId]);
 
+  // Enter edit mode automatically when navigated with startEditing flag
+  // (e.g. after creating a new document)
+  useEffect(() => {
+    if (!isEditing && currentDoc && location.state?.startEditing) {
+      handleEnterEdit();
+      // Clear the state so refreshes don't re-enter edit mode
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDoc]);
+
+  // ── Edit-mode helpers ──────────────────────────────────────────────
+  const handleEnterEdit = useCallback(() => {
+    if (!currentDoc) return;
+    setTitle(currentDoc.title || '');
+    const content = currentDoc.content_html || currentDoc.content_md || '';
+    setInitialContent(content);
+    lastSavedHtmlRef.current = currentDoc.content_html || '';
+    setIsEditing(true);
+  }, [currentDoc]);
+
+  const handleExitEdit = useCallback(async () => {
+    setIsEditing(false);
+    setEditorInstance(null);
+    setSourceMode(false);
+    setZoom(100);
+    // Reload doc to reflect any saved changes in read view
+    if (kbId && docId) await fetchDoc(kbId, docId);
+  }, [kbId, docId, fetchDoc]);
+
+  // Auto-save (no version snapshot)
+  const handleAutoSave = useCallback(
+    async (html: string) => {
+      if (!docId || !kbId) return;
+      const md = htmlToMarkdown(html);
+      await docsApi.updateDoc(docId, {
+        title: titleRef.current,
+        content_html: html,
+        content_md: md,
+        word_count: md.length,
+        is_manual_save: false,
+      });
+    },
+    [docId, kbId],
+  );
+
+  // Manual save (creates version snapshot)
+  const handleManualSave = useCallback(
+    async (html: string) => {
+      if (!docId || !kbId) return;
+      if (html === lastSavedHtmlRef.current) {
+        toast({ title: '已是最新版本，无需重复保存' });
+        return;
+      }
+      const md = htmlToMarkdown(html);
+      await docsApi.updateDoc(docId, {
+        title: titleRef.current,
+        content_html: html,
+        content_md: md,
+        word_count: md.length,
+        is_manual_save: true,
+      });
+      lastSavedHtmlRef.current = html;
+    },
+    [docId, kbId],
+  );
+
+  const { saveStatus, triggerSave, triggerManualSave } = useAutoSave({
+    onSave: handleAutoSave,
+    onManualSave: handleManualSave,
+    editor: editorInstance,
+  });
+
+  const handleEditorUpdate = useCallback(
+    (html: string, wc: number) => {
+      setWordCount(wc);
+      triggerSave(html);
+    },
+    [triggerSave],
+  );
+
+  // ── Read-mode helpers ──────────────────────────────────────────────
   const handleToggleFavorite = async () => {
     if (!currentDoc) return;
     try {
@@ -51,6 +171,9 @@ const DocReadPage: React.FC = () => {
     setActivePanel((prev) => (prev === panel ? null : panel));
   };
 
+  const canEdit = (ROLE_LEVELS[currentKb?.my_role ?? ''] ?? 0) >= ROLE_LEVELS['editor'];
+
+  // ── Loading / not found ────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -68,8 +191,92 @@ const DocReadPage: React.FC = () => {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // EDIT MODE
+  // ─────────────────────────────────────────────────────────────────
+  if (isEditing) {
+    return (
+      <div className="flex flex-col h-full bg-[#f0f0f0] overflow-hidden">
+        {/* Top Bar */}
+        <div className="h-12 border-b flex items-center px-4 gap-3 flex-shrink-0 z-10 bg-white shadow-sm">
+          <button
+            onClick={handleExitEdit}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            退出编辑
+          </button>
+          <div className="flex-1" />
+          <span className={`text-xs ${saveStatusColors[saveStatus]}`}>
+            {saveStatusLabels[saveStatus]}
+          </span>
+          <button
+            onClick={() => editorInstance && triggerManualSave(editorInstance.getHTML())}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg transition"
+          >
+            保存版本 (Ctrl+S)
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        {editorInstance && (
+          <EditorToolbar
+            editor={editorInstance}
+            zoom={zoom}
+            onZoomChange={setZoom}
+            sourceMode={sourceMode}
+            onSourceModeChange={setSourceMode}
+          />
+        )}
+
+        {/* Editor Area — paper on grey canvas */}
+        <div className="flex-1 overflow-y-auto py-8 px-4">
+          <div
+            className="mx-auto bg-white shadow-md rounded-sm"
+            style={{ maxWidth: 1100, zoom: zoom / 100 }}
+          >
+            <div className="px-16 py-12">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => { setTitle(e.target.value); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editorInstance?.commands.focus(); } }}
+                placeholder="无标题文档"
+                className="w-full text-3xl font-bold border-none outline-none mb-6 placeholder:text-muted-foreground/30 bg-transparent text-gray-900 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+              {kbId && (
+                <EditorCore
+                  content={initialContent}
+                  kbId={kbId}
+                  onEditorReady={(ed) => setEditorInstance(ed)}
+                  onUpdate={handleEditorUpdate}
+                  editable={true}
+                  sourceMode={sourceMode}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Status Bar */}
+        <div className="h-8 border-t flex items-center px-4 gap-4 flex-shrink-0 bg-white">
+          <span className="text-xs text-muted-foreground">{wordCount} 字</span>
+          <span className="text-xs text-muted-foreground">|</span>
+          <span className="text-xs text-muted-foreground">Ctrl+S 保存版本</span>
+          <span className="text-xs text-muted-foreground">|</span>
+          <span className="text-xs text-muted-foreground">自动保存已开启（2秒）</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // READ MODE
+  // ─────────────────────────────────────────────────────────────────
   const content = currentDoc.content_html || currentDoc.content_md || '';
-  const wordCount = currentDoc.word_count || 0;
+  const readWordCount = currentDoc.word_count || 0;
 
   return (
     <div className="flex h-full bg-white overflow-hidden">
@@ -89,10 +296,9 @@ const DocReadPage: React.FC = () => {
 
           <div className="flex-1" />
 
-          {/* Can edit if role is editor or above */}
-          {(ROLE_LEVELS[currentKb?.my_role ?? ''] ?? 0) >= ROLE_LEVELS['editor'] && (
+          {canEdit && (
             <button
-              onClick={() => navigate(`/kb/${kbId}/docs/${docId}/edit`)}
+              onClick={handleEnterEdit}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -182,7 +388,7 @@ const DocReadPage: React.FC = () => {
                 {currentDoc.updated_at && (
                   <span>{new Date(currentDoc.updated_at).toLocaleString()}</span>
                 )}
-                <span>{wordCount} 字</span>
+                <span>{readWordCount} 字</span>
               </div>
 
               <DocViewer content={content} containerRef={contentRef} />
@@ -206,7 +412,14 @@ const DocReadPage: React.FC = () => {
         <SharePanel docId={currentDoc.id} kbId={kbId!} onClose={() => setActivePanel(null)} />
       )}
       {activePanel === 'versions' && (
-        <VersionList docId={currentDoc.id} kbId={kbId!} onClose={() => setActivePanel(null)} />
+        <VersionList
+          docId={currentDoc.id}
+          kbId={kbId!}
+          onClose={() => setActivePanel(null)}
+          onRestore={async () => {
+            if (kbId && docId) await fetchDoc(kbId, docId);
+          }}
+        />
       )}
     </div>
   );

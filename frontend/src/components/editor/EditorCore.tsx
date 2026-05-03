@@ -19,7 +19,32 @@ import Color from '@tiptap/extension-color'
 import TextAlign from '@tiptap/extension-text-align'
 import { Extension } from '@tiptap/core'
 import { createLowlight, common } from 'lowlight'
+import { marked } from 'marked'
+import TurndownService from 'turndown'
 import { uploadImage } from '../../api/upload'
+
+// Shared turndown instance for HTML → Markdown conversion
+const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
+// Add GFM table rule
+turndown.addRule('tables', {
+  filter: ['table'],
+  replacement(_content, node) {
+    const table = node as HTMLTableElement
+    const rows = Array.from(table.rows)
+    if (!rows.length) return ''
+    const toRow = (cells: HTMLCollectionOf<HTMLTableCellElement>) =>
+      '| ' + Array.from(cells).map(c => c.textContent?.trim().replace(/\|/g, '\\|') ?? '').join(' | ') + ' |'
+    const header = toRow(rows[0].cells)
+    const separator = '| ' + Array.from(rows[0].cells).map(() => '---').join(' | ') + ' |'
+    const body = rows.slice(1).map(r => toRow(r.cells)).join('\n')
+    return '\n\n' + [header, separator, body].filter(Boolean).join('\n') + '\n\n'
+  },
+})
+
+/** Convert HTML to Markdown */
+export function htmlToMarkdown(html: string): string {
+  return turndown.turndown(html)
+}
 
 // Extend TextStyle to also support fontSize attribute
 const FontSize = Extension.create({
@@ -45,37 +70,26 @@ const FontSize = Extension.create({
 
 const lowlight = createLowlight(common)
 
-/** Very simple markdown-to-HTML converter for paste detection preview */
+// Configure marked: GFM enabled (handles pipe tables, task lists, etc.)
+marked.setOptions({ gfm: true, breaks: false })
+
+/** Convert markdown text to HTML using marked */
 function markdownToHtml(md: string): string {
-  return md
-    .replace(/^(#{1,6})\s+(.+)$/gm, (_m, hashes: string, text: string) => `<h${hashes.length}>${text}</h${hashes.length}>`)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    .replace(/^[-*+]\s+(.+)$/gm, '<li>$1</li>')
-    .replace(/^(\d+)\.\s+(.+)$/gm, '<li>$1. $2</li>')
-    .replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>')
-    .replace(/^---+$/gm, '<hr/>')
-    .replace(/\n\n+/g, '</p><p>')
-    .replace(/^([^<\n].*)$/gm, (_m, line: string) => {
-      if (!line.trim()) return ''
-      if (/^<(h\d|li|blockquote|hr|ul|ol|p|\/p)/.test(line)) return line
-      return line
-    })
+  return marked.parse(md) as string
 }
 
 /** Detect if text looks like markdown (has md syntax patterns) */
 function looksLikeMarkdown(text: string): boolean {
   const mdPatterns = [
-    /^#{1,6}\s+\S/m,         // headings
-    /\*\*[^*]+\*\*/,          // bold
-    /^[-*+]\s+\S/m,           // unordered list
-    /^\d+\.\s+\S/m,           // ordered list
-    /^>\s+\S/m,               // blockquote
-    /\[.+\]\(.+\)/,           // link
-    /```[\s\S]+```/,          // fenced code block
-    /^---+$/m,                // hr
+    /^#{1,6}\s+\S/m,          // headings
+    /\*\*[^*]+\*\*/,           // bold
+    /^[-*+]\s+\S/m,            // unordered list
+    /^\d+\.\s+\S/m,            // ordered list
+    /^>\s+\S/m,                // blockquote
+    /\[.+\]\(.+\)/,            // link
+    /```[\s\S]+```/,           // fenced code block
+    /^---+$/m,                 // hr
+    /^\|.+\|.+\|/m,            // pipe table
   ]
   const matched = mdPatterns.filter(p => p.test(text)).length
   return matched >= 2 || (matched >= 1 && text.length > 200)
@@ -212,12 +226,15 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
     }
   }, [content, editor])
 
-  // Sync source mode content from editor when toggling
+  // Sync source mode: enter → HTML→MD; exit → MD→HTML
   useEffect(() => {
     if (sourceMode && editor) {
-      setSourceContent(editor.getHTML())
+      // Convert current rich-text content to Markdown for display in textarea
+      setSourceContent(htmlToMarkdown(editor.getHTML()))
     } else if (!sourceMode && editor && sourceContent) {
-      editor.commands.setContent(sourceContent)
+      // Convert Markdown back to HTML and load into editor
+      const html = markdownToHtml(sourceContent)
+      editor.commands.setContent(html)
     }
   }, [sourceMode])
 
@@ -275,8 +292,10 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
           className="w-full min-h-[400px] font-mono text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded p-4 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-400"
           value={sourceContent}
           onChange={(e) => {
-            setSourceContent(e.target.value)
-            onUpdate(e.target.value, e.target.value.length)
+            const md = e.target.value
+            setSourceContent(md)
+            // Convert Markdown → HTML before passing to onUpdate so auto-save gets correct HTML
+            onUpdate(markdownToHtml(md), md.length)
           }}
           spellCheck={false}
         />

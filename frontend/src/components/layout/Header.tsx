@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, Bell, ChevronDown, LogOut, User, Settings, BookOpen } from 'lucide-react'
+import { Search, Bell, ChevronDown, LogOut, User, Settings } from 'lucide-react'
 import { useState } from 'react'
 import {
   DropdownMenu,
@@ -46,7 +46,7 @@ export function Header({ className }: HeaderProps) {
     >
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2 shrink-0">
-        <BookOpen className="h-5 w-5 text-primary" />
+        <img src="/logo.png" alt="KnowFlow" className="h-7 w-7 object-contain" style={{ border: 'none', background: 'transparent' }} />
         <span className="font-bold text-lg tracking-tight">KnowFlow</span>
       </Link>
 

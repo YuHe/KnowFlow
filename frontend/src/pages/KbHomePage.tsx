@@ -19,7 +19,7 @@ const KbHomePage: React.FC = () => {
     try {
       const doc = await docsApi.createDoc(kbId, { title: '无标题文档', content_md: '' });
       await fetchTree(kbId);
-      navigate(`/kb/${kbId}/docs/${doc.id}/edit`);
+      navigate(`/kb/${kbId}/docs/${doc.id}`, { state: { startEditing: true } });
     } finally {
       setIsCreating(false);
     }

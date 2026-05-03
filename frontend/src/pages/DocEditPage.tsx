@@ -135,7 +135,7 @@ const DocEditPage: React.FC = () => {
         <div
           className="mx-auto bg-white shadow-md rounded-sm"
           style={{
-            maxWidth: 860,
+            maxWidth: 1100,
             zoom: zoom / 100,
           }}
         >
@@ -146,7 +146,7 @@ const DocEditPage: React.FC = () => {
               onChange={(e) => { setTitle(e.target.value); markDirty(); }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editorInstance?.commands.focus(); } }}
               placeholder="无标题文档"
-              className="w-full text-3xl font-bold border-none outline-none mb-6 placeholder:text-muted-foreground/30 bg-transparent text-gray-900"
+              className="w-full text-3xl font-bold border-none outline-none mb-6 placeholder:text-muted-foreground/30 bg-transparent text-gray-900 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {kbId && (
               <EditorCore

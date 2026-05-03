@@ -1,5 +1,5 @@
 import { useEffect, lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { KbLayout } from '@/components/layout/KbLayout'
@@ -12,8 +12,13 @@ import HomePage from '@/pages/HomePage'
 import KbHomePage from '@/pages/KbHomePage'
 import DocReadPage from '@/pages/DocReadPage'
 
+/** Redirect /docs/:docId/edit → /docs/:docId with startEditing state */
+function EditRedirect() {
+  const { kbId, docId } = useParams<{ kbId: string; docId: string }>()
+  return <Navigate to={`/kb/${kbId}/docs/${docId}`} state={{ startEditing: true }} replace />
+}
+
 // ── Lazily loaded pages ───────────────────────────────────────────────────────
-const DocEditPage = lazy(() => import('@/pages/DocEditPage'))
 const KbSettingsPage = lazy(() => import('@/pages/KbSettingsPage'))
 const SearchResultPage = lazy(() => import('@/pages/SearchResultPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
@@ -98,7 +103,7 @@ export default function App() {
               <Route path="/kb/:kbId" element={<KbLayout />}>
                 <Route index element={<KbHomePage />} />
                 <Route path="docs/:docId" element={<DocReadPage />} />
-                <Route path="docs/:docId/edit" element={<DocEditPage />} />
+                <Route path="docs/:docId/edit" element={<EditRedirect />} />
                 <Route path="settings" element={<KbSettingsPage />} />
               </Route>
             </Route>
