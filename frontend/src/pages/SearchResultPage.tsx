@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useKbStore } from '../store/kbStore';
 import { searchApi } from '../api/search';
 import type { SearchResultItem } from '../types';
 
 const SearchResultPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { kbs } = useKbStore();
 
   const queryParam = searchParams.get('q') || '';
@@ -55,6 +56,17 @@ const SearchResultPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-6 py-6">
+        {/* Back button */}
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition mb-4"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          返回
+        </button>
+
         {/* Filters */}
         <div className="flex items-center gap-3 mb-5 flex-wrap">
           <span className="text-sm text-gray-500">筛选：</span>
