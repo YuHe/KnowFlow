@@ -1,6 +1,6 @@
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { Search, Bell, ChevronDown, LogOut, User, Settings, Star } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +20,17 @@ interface HeaderProps {
 
 export function Header({ className }: HeaderProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, logout } = useAuthStore()
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Sync search input with URL ?q= param when on the search page
+  useEffect(() => {
+    if (location.pathname === '/search') {
+      const params = new URLSearchParams(location.search)
+      setSearchQuery(params.get('q') || '')
+    }
+  }, [location.pathname, location.search])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,6 +67,17 @@ export function Header({ className }: HeaderProps) {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           leftIcon={<Search className="h-4 w-4" />}
+          rightIcon={
+            <button
+              type="submit"
+              className="flex items-center justify-center w-6 h-6 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+              aria-label="搜索"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          }
           className="h-9"
         />
       </form>

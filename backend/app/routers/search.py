@@ -5,7 +5,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -34,11 +34,15 @@ async def full_text_search(
     page_size = min(max(1, page_size), 100)
     offset = (page - 1) * page_size
 
-    # Build base FTS condition using PostgreSQL to_tsvector / plainto_tsquery
-    fts_condition = text(
-        "to_tsvector('simple', COALESCE(documents.title, '') || ' ' || COALESCE(documents.content_md, '')) "
-        "@@ plainto_tsquery('simple', :q)"
-    ).bindparams(q=q.strip())
+    search_term = q.strip()
+    like_pattern = f"%{search_term}%"
+
+    # Use ILIKE for partial/substring matching (works well for Chinese and English).
+    # This allows "知识" to match "知识库", and "doc" to match "document".
+    search_condition = or_(
+        Document.title.ilike(like_pattern),
+        func.coalesce(Document.content_md, "").ilike(like_pattern),
+    )
 
     # Restrict to KBs the user is a member of (or public KBs, or super_admin)
     if current_user.role == "super_admin":
@@ -60,16 +64,11 @@ async def full_text_search(
             Document.title,
             Document.updated_at,
             Document.updated_by,
-            func.ts_headline(
-                "simple",
-                func.coalesce(Document.content_md, ""),
-                func.plainto_tsquery("simple", q.strip()),
-                "MaxFragments=2, MaxWords=20, MinWords=5",
-            ).label("snippet"),
+            func.coalesce(Document.content_md, "").label("content_md"),
         )
         .where(
             and_(
-                fts_condition,
+                search_condition,
                 Document.knowledge_base_id.in_(accessible_kb_ids_subquery),
             )
         )
@@ -102,13 +101,29 @@ async def full_text_search(
         user_rows = (await db.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
         user_map = {u.id: u for u in user_rows}
 
+    def make_snippet(content: str, term: str, max_len: int = 200) -> str:
+        """Extract a short excerpt around the first occurrence of term."""
+        lower_content = content.lower()
+        lower_term = term.lower()
+        pos = lower_content.find(lower_term)
+        if pos == -1:
+            return content[:max_len]
+        start = max(0, pos - 60)
+        end = min(len(content), pos + len(term) + 140)
+        excerpt = content[start:end]
+        if start > 0:
+            excerpt = "…" + excerpt
+        if end < len(content):
+            excerpt = excerpt + "…"
+        return excerpt
+
     items = [
         {
             "doc_id": str(row.id),
             "kb_id": str(row.knowledge_base_id),
             "kb_name": kb_map.get(row.knowledge_base_id, ""),
             "title": row.title,
-            "snippet": row.snippet or "",
+            "snippet": make_snippet(row.content_md, search_term),
             "updated_at": row.updated_at.isoformat(),
             "updated_by": (
                 {
@@ -124,4 +139,5 @@ async def full_text_search(
     ]
 
     return paginate(items, total, page, page_size)
+
 
