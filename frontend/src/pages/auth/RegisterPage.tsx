@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/store/authStore'
@@ -57,7 +56,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-3">
-            <BookOpen className="h-7 w-7 text-primary" />
+            <img src="/logo.png" alt="KnowFlow" className="h-7 w-7 object-contain" style={{ border: 'none', background: 'transparent' }} />
             <span className="text-2xl font-bold">KnowFlow</span>
           </div>
           <p className="text-muted-foreground">创建你的账号</p>
