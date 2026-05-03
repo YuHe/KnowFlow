@@ -131,6 +131,17 @@
     @apply outline-none min-h-[200px];
   }
 
+  /* Allow inline text color to work on bold/italic elements inside prose.
+     Tailwind Typography sets color on <strong> via --tw-prose-bold which can
+     override TipTap's textStyle color spans. We reset it so inline styles win. */
+  .ProseMirror strong,
+  .ProseMirror em,
+  .ProseMirror s,
+  .doc-content strong,
+  .doc-content em {
+    color: inherit;
+  }
+
   /* Remove browser/Tailwind focus ring from the editor content area */
   .ProseMirror:focus,
   .ProseMirror:focus-visible {

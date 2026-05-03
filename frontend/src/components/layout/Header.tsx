@@ -1,5 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { Search, Bell, ChevronDown, LogOut, User, Settings, Star } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Bell, ChevronDown, LogOut, User, Settings } from 'lucide-react'
 import { useState } from 'react'
 import {
   DropdownMenu,
@@ -70,16 +70,6 @@ export function Header({ className }: HeaderProps) {
         >
           <Bell className="h-4 w-4" />
         </button>
-
-        <Link
-          to="/profile"
-          state={{ defaultTab: 'favorites' }}
-          className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
-          aria-label="我的收藏"
-          title="我的收藏"
-        >
-          <Star className="h-4 w-4" />
-        </Link>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

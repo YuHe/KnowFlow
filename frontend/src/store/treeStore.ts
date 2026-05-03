@@ -19,6 +19,7 @@ interface TreeState {
   collapseNode: (id: string) => void
   expandAll: () => void
   collapseAll: () => void
+  expandToDoc: (docId: string) => void   // expand all ancestors of a doc
   selectNode: (id: string | null) => void
   setSelectedDocId: (docId: string | null) => void
   addSection: (section: Section) => void
@@ -109,6 +110,11 @@ export const useTreeStore = create<TreeState>((set, get) => ({
       const { sections, docs } = await docsApi.getTree(kbId)
       const treeNodes = buildTreeNodes(sections, docs, null, null)
       set({ sections, docs, treeNodes, isLoading: false })
+      // After tree is loaded, re-run expandToDoc for the currently selected doc
+      const { selectedDocId } = get()
+      if (selectedDocId) {
+        get().expandToDoc(selectedDocId)
+      }
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to fetch tree',
@@ -155,6 +161,35 @@ export const useTreeStore = create<TreeState>((set, get) => ({
 
   collapseAll: () => {
     set({ expandedIds: new Set<string>() })
+  },
+
+  expandToDoc: (docId: string) => {
+    // Collect all ancestor node IDs (sections and parent docs) for the target doc.
+    // Walk up the docs/sections arrays to find the full ancestry chain.
+    const { docs, sections, expandedIds } = get()
+    const newIds = new Set(expandedIds)
+
+    // Find the doc
+    const targetDoc = docs.find((d) => d.id === docId)
+    if (!targetDoc) return
+
+    // Traverse up parent docs
+    let currentParentDocId: string | null = targetDoc.parent_id
+    while (currentParentDocId) {
+      newIds.add(`doc-${currentParentDocId}`)
+      const parentDoc = docs.find((d) => d.id === currentParentDocId)
+      currentParentDocId = parentDoc?.parent_id ?? null
+    }
+
+    // Traverse up parent sections
+    let currentSectionId: string | null = targetDoc.section_id
+    while (currentSectionId) {
+      newIds.add(`section-${currentSectionId}`)
+      const section = sections.find((s) => s.id === currentSectionId)
+      currentSectionId = section?.parent_id ?? null
+    }
+
+    set({ expandedIds: newIds })
   },
 
   selectNode: (id: string | null) => {

@@ -46,7 +46,6 @@ const DocReadPage: React.FC = () => {
   const location = useLocation();
   const { currentDoc, fetchDoc, isLoading } = useDocStore();
   const { currentKb } = useKbStore();
-  const { selectedNodeId, selectNode } = useTreeStore();
   const contentRef = useRef<HTMLDivElement>(null);
 
   // ── Read-mode state ────────────────────────────────────────────────
@@ -68,11 +67,37 @@ const DocReadPage: React.FC = () => {
   const lastSavedHtmlRef = useRef('');
   // Ref to editorInstance for use in effects without stale closure
   const editorInstanceRef = useRef<Editor | null>(null);
+  // Track previous docId to detect when user navigates to a different doc
+  const prevDocIdRef = useRef<string | undefined>(undefined);
 
   // ── Load document ──────────────────────────────────────────────────
   useEffect(() => {
     if (kbId && docId) fetchDoc(kbId, docId);
   }, [kbId, docId]);
+
+  // Auto-expand tree to show the current doc when navigating directly via URL.
+  // setSelectedDocId keeps the store in sync so fetchTree (if it fires later) can also expand.
+  useEffect(() => {
+    if (docId) {
+      useTreeStore.getState().setSelectedDocId(docId);
+      useTreeStore.getState().expandToDoc(docId);
+    }
+  }, [docId]);
+
+  // Reset editing state when the user navigates to a different document
+  // (React Router reuses this component instance across docs in the same KB)
+  useEffect(() => {
+    if (prevDocIdRef.current !== undefined && prevDocIdRef.current !== docId) {
+      // docId changed: exit edit mode without saving (auto-save already handled by useAutoSave)
+      setIsEditing(false);
+      setEditorInstance(null);
+      editorInstanceRef.current = null;
+      setSourceMode(false);
+      setZoom(100);
+      setActivePanel(null);
+    }
+    prevDocIdRef.current = docId;
+  }, [docId]);
 
   // Check favorite status when doc loads
   useEffect(() => {
@@ -82,33 +107,6 @@ const DocReadPage: React.FC = () => {
       setIsFavorited(found);
     }).catch(() => {});
   }, [docId]);
-
-  // Handle tree node selection — navigate even while in edit mode
-  useEffect(() => {
-    if (!selectedNodeId || !kbId) return;
-    if (selectedNodeId.startsWith('doc-')) {
-      const targetDocId = selectedNodeId.replace('doc-', '');
-      if (targetDocId !== docId) {
-        selectNode(null);
-        // If editing, fire-and-forget save before navigating
-        if (isEditing && editorInstanceRef.current) {
-          const html = editorInstanceRef.current.getHTML();
-          docsApi.updateDoc(docId!, {
-            title: titleRef.current,
-            content_html: html,
-            content_md: htmlToMarkdown(html),
-            is_manual_save: false,
-          }).catch(() => {});
-          setIsEditing(false);
-          setEditorInstance(null);
-          editorInstanceRef.current = null;
-        }
-        navigate(`/kb/${kbId}/docs/${targetDocId}`);
-      } else {
-        selectNode(null);
-      }
-    }
-  }, [selectedNodeId, kbId]);
 
   // Enter edit mode automatically when navigated with startEditing flag
   // (e.g. after creating a new document)
