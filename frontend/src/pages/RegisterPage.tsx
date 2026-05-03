@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../api/auth';
-import logoUrl from '/logo.png?url';
+import logoUrl from '@/assets/logo.png';
 
 interface RegisterForm {
   username: string;

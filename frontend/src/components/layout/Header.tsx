@@ -1,7 +1,7 @@
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { Search, Bell, ChevronDown, LogOut, User, Settings, Star } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import logoUrl from '/logo.png?url'
+import logoUrl from '@/assets/logo.png'
 import {
   DropdownMenu,
   DropdownMenuContent,

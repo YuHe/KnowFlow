@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import logoUrl from '/logo.png?url';
+import logoUrl from '@/assets/logo.png';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
