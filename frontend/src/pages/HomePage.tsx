@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useKbStore } from '@/store/kbStore'
 import KbCreateDialog from '@/components/kb/KbCreateDialog'
+import KbIcon from '@/components/kb/KbIcon'
 import type { KnowledgeBase } from '@/types'
 
 const HomePage: React.FC = () => {
@@ -61,7 +62,7 @@ const HomePage: React.FC = () => {
                   className="group bg-background border rounded-xl p-5 hover:border-primary/50 hover:shadow-sm transition"
                 >
                   <div className="flex items-center gap-3 mb-3">
-                    <span className="text-2xl">{kb.icon || '📚'}</span>
+                    <KbIcon icon={kb.icon || '📚'} iconUrl={kb.icon_url} className="w-8 h-8 flex-shrink-0" emojiClass="text-2xl" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate group-hover:text-primary transition">
                         {kb.name}

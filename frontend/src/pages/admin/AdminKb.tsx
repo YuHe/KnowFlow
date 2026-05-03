@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { adminApi } from '../../api/admin';
 import type { KnowledgeBase } from '../../types';
+import KbIcon from '@/components/kb/KbIcon';
 
 const AdminKb: React.FC = () => {
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
@@ -134,7 +135,7 @@ const AdminKb: React.FC = () => {
                   <tr key={kb.id} className="hover:bg-gray-50 transition">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
-                        <span>{kb.icon || '📚'}</span>
+                        <KbIcon icon={kb.icon || '📚'} iconUrl={kb.icon_url} className="w-6 h-6 flex-shrink-0" emojiClass="text-base" />
                         <div>
                           <p className="font-medium text-gray-800">{kb.name}</p>
                           {kb.description && <p className="text-xs text-gray-400 truncate max-w-xs">{kb.description}</p>}

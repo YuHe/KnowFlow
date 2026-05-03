@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi } from '../../api/admin';
 import type { AdminStats, KnowledgeBase } from '../../types';
+import KbIcon from '@/components/kb/KbIcon';
 
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -149,7 +150,7 @@ const AdminDashboard: React.FC = () => {
                       <tr key={kb.id} className="hover:bg-gray-50 transition">
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2">
-                            <span>{kb.icon || '📚'}</span>
+                            <KbIcon icon={kb.icon || '📚'} iconUrl={kb.icon_url} className="w-6 h-6 flex-shrink-0" emojiClass="text-base" />
                             <span className="font-medium text-gray-800">{kb.name}</span>
                           </div>
                         </td>

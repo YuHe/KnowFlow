@@ -4,6 +4,9 @@ import { useKbStore } from '@/store/kbStore';
 import { useDocStore } from '@/store/docStore';
 import { useTreeStore } from '@/store/treeStore';
 import { docsApi } from '@/api/docs';
+import { ROLE_LEVELS } from '@/types';
+import KbIconEditor from '@/components/kb/KbIconEditor';
+import KbIcon from '@/components/kb/KbIcon';
 
 const KbHomePage: React.FC = () => {
   const { kbId } = useParams<{ kbId: string }>();
@@ -47,7 +50,24 @@ const KbHomePage: React.FC = () => {
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-8 py-12">
           <div className="text-center mb-12">
-            <div className="text-6xl mb-4">{currentKb?.icon || '📚'}</div>
+            <div className="flex justify-center mb-4">
+              {kbId && currentKb && (ROLE_LEVELS[currentKb.my_role ?? 'viewer'] ?? 0) >= ROLE_LEVELS['admin'] ? (
+                <KbIconEditor
+                  kbId={kbId}
+                  icon={currentKb.icon}
+                  iconUrl={currentKb.icon_url}
+                  sizeClass="w-20 h-20"
+                  emojiClass="text-6xl"
+                />
+              ) : (
+                <KbIcon
+                  icon={currentKb?.icon || '📚'}
+                  iconUrl={currentKb?.icon_url}
+                  className="w-20 h-20"
+                  emojiClass="text-6xl"
+                />
+              )}
+            </div>
             <h1 className="text-3xl font-bold mb-3">{currentKb?.name}</h1>
             {currentKb?.description && (
               <p className="text-muted-foreground text-base leading-relaxed max-w-lg mx-auto">

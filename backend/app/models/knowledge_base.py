@@ -36,6 +36,7 @@ class KnowledgeBase(Base):
     icon: Mapped[str] = mapped_column(
         String(32), nullable=False, default="📁", server_default="📁"
     )
+    icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     visibility: Mapped[str] = mapped_column(
         String(16), nullable=False, default="private", server_default="private"
     )

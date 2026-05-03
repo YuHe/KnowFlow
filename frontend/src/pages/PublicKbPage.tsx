@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../api/client';
+import KbIcon from '@/components/kb/KbIcon';
 
 interface PublicKbData {
   id: string;
@@ -8,6 +9,7 @@ interface PublicKbData {
   slug: string;
   description?: string;
   icon: string;
+  icon_url?: string | null;
 }
 
 interface PublicDocItem {
@@ -84,7 +86,7 @@ const PublicKbPage: React.FC = () => {
     <div className="flex flex-col h-screen bg-white">
       {/* Top Bar */}
       <div className="h-14 bg-white border-b border-gray-200 flex items-center px-5 gap-3 flex-shrink-0">
-        <span className="text-xl">{kb?.icon || '📚'}</span>
+        <KbIcon icon={kb?.icon || '📚'} iconUrl={kb?.icon_url} className="w-7 h-7 flex-shrink-0" emojiClass="text-xl" />
         <span className="font-semibold text-gray-900">{kb?.name}</span>
         {kb?.description && (
           <span className="text-sm text-gray-400 hidden md:block">— {kb.description}</span>
@@ -134,7 +136,7 @@ const PublicKbPage: React.FC = () => {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <span className="text-5xl mb-4">{kb?.icon || '📚'}</span>
+              <KbIcon icon={kb?.icon || '📚'} iconUrl={kb?.icon_url} className="w-16 h-16 mb-4" emojiClass="text-5xl" />
               <h2 className="text-2xl font-bold text-gray-900 mb-2">{kb?.name}</h2>
               {kb?.description && <p className="text-gray-500 max-w-md">{kb.description}</p>}
               <p className="text-sm text-gray-400 mt-4">从左侧目录选择文档开始阅读</p>

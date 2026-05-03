@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useKbStore } from '@/store/kbStore';
 import MemberManage from '@/components/kb/MemberManage';
 import { ROLE_LEVELS } from '@/types';
+import KbIcon from '@/components/kb/KbIcon';
 
 const KbSettingsPage: React.FC = () => {
   const { kbId } = useParams<{ kbId: string }>();
@@ -30,8 +31,9 @@ const KbSettingsPage: React.FC = () => {
       <div className="max-w-2xl mx-auto px-8 py-10">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
-          <Link to={`/kb/${kbId}`} className="hover:text-foreground transition">
-            {currentKb.icon} {currentKb.name}
+          <Link to={`/kb/${kbId}`} className="hover:text-foreground transition flex items-center gap-1">
+            <KbIcon icon={currentKb.icon} iconUrl={currentKb.icon_url} className="w-5 h-5" emojiClass="text-base" />
+            {currentKb.name}
           </Link>
           <span>/</span>
           <span className="text-foreground">成员管理</span>

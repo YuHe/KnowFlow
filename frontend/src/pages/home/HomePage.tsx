@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatRelativeTime } from '@/utils'
+import KbIcon from '@/components/kb/KbIcon'
 
 export default function HomePage() {
   const { user } = useAuthStore()
@@ -62,7 +63,7 @@ export default function HomePage() {
               className="group rounded-lg border p-4 hover:border-primary/50 hover:shadow-sm transition-all"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xl">{kb.icon || '📚'}</span>
+                <KbIcon icon={kb.icon || '📚'} iconUrl={kb.icon_url} className="w-7 h-7 flex-shrink-0" emojiClass="text-xl" />
                 <h3 className="font-semibold group-hover:text-primary transition-colors truncate">
                   {kb.name}
                 </h3>

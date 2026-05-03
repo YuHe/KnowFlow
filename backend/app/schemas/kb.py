@@ -18,6 +18,7 @@ class KbCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     description: Optional[str] = None
     icon: str = Field(default="📁", max_length=32)
+    icon_url: Optional[str] = None
     visibility: str = Field(default="private", pattern="^(private|public)$")
 
 
@@ -25,6 +26,7 @@ class KbUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=128)
     description: Optional[str] = None
     icon: Optional[str] = Field(default=None, max_length=32)
+    icon_url: Optional[str] = None
     visibility: Optional[str] = Field(default=None, pattern="^(private|public)$")
 
 
@@ -34,6 +36,7 @@ class KbOut(BaseModel):
     slug: str
     description: Optional[str] = None
     icon: str
+    icon_url: Optional[str] = None
     visibility: str
     owner_id: uuid.UUID
     created_at: datetime

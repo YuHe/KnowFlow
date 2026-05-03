@@ -80,6 +80,7 @@ export interface KnowledgeBase {
   slug: string
   description: string | null
   icon: string
+  icon_url: string | null
   visibility: 'private' | 'public'
   owner_id: string
   member_count?: number
@@ -103,6 +104,7 @@ export interface KbCreate {
   name: string
   description?: string
   icon?: string
+  icon_url?: string | null
   visibility?: 'private' | 'public'
 }
 
@@ -110,6 +112,7 @@ export interface KbUpdate {
   name?: string
   description?: string
   icon?: string
+  icon_url?: string | null
   visibility?: 'private' | 'public'
 }
 

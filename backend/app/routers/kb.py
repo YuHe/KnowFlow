@@ -209,6 +209,9 @@ async def update_kb(
         kb.description = payload.description
     if payload.icon is not None:
         kb.icon = payload.icon
+    if payload.icon_url is not None:
+        # Empty string means "clear the avatar"
+        kb.icon_url = payload.icon_url if payload.icon_url else None
     if payload.visibility is not None:
         kb.visibility = payload.visibility
 

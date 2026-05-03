@@ -6,6 +6,7 @@ import { useKbStore } from '@/store/kbStore'
 import { useTreeStore } from '@/store/treeStore'
 import { cn } from '@/utils'
 import DocTree from '@/components/tree/DocTree'
+import KbIcon from '@/components/kb/KbIcon'
 
 const MIN_SIDEBAR_WIDTH = 180
 const MAX_SIDEBAR_WIDTH = 480
@@ -78,7 +79,12 @@ export function KbLayout() {
               <ChevronLeft className="w-4 h-4" />
             </Link>
             <Link to={`/kb/${kbId}`} className="flex items-center gap-2 min-w-0 flex-1 hover:opacity-80 transition">
-              <span className="text-lg">{currentKb?.icon || '📚'}</span>
+              <KbIcon
+                icon={currentKb?.icon || '📚'}
+                iconUrl={currentKb?.icon_url}
+                className="w-6 h-6 flex-shrink-0"
+                emojiClass="text-lg"
+              />
               <span className="text-sm font-semibold truncate">{currentKb?.name}</span>
             </Link>
           </div>
