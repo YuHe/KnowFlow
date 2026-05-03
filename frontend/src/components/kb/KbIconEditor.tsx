@@ -2,7 +2,6 @@ import React, { useRef, useState } from 'react'
 import { uploadImage } from '@/api/upload'
 import { kbApi } from '@/api/kb'
 import { useKbStore } from '@/store/kbStore'
-import KbIcon from './KbIcon'
 
 interface KbIconEditorProps {
   kbId: string
@@ -11,6 +10,15 @@ interface KbIconEditorProps {
   /** Size of the clickable area, e.g. "w-20 h-20" */
   sizeClass?: string
   emojiClass?: string
+}
+
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return parsed.pathname + parsed.search
+  } catch {
+    return url
+  }
 }
 
 /**
@@ -48,7 +56,6 @@ const KbIconEditor: React.FC<KbIconEditorProps> = ({
     setMenuOpen(false)
     setLoading(true)
     try {
-      // Send empty string to signal clear; backend stores null
       const updated = await kbApi.updateKb(kbId, { icon_url: '' })
       updateKb(kbId, { icon_url: updated.icon_url })
     } finally {
@@ -58,15 +65,27 @@ const KbIconEditor: React.FC<KbIconEditorProps> = ({
 
   return (
     <div className="relative inline-block">
-      {/* Avatar */}
+      {/* Avatar button */}
       <button
         type="button"
         onClick={() => setMenuOpen((o) => !o)}
-        className={`relative flex items-center justify-center rounded-full overflow-hidden ${sizeClass} group focus:outline-none`}
+        className={`relative rounded-full overflow-hidden ${sizeClass} group focus:outline-none`}
         disabled={loading}
       >
-        <KbIcon icon={icon} iconUrl={iconUrl} className="w-full h-full" emojiClass={emojiClass} />
-        {/* Overlay on hover */}
+        {iconUrl ? (
+          /* absolute inset-0 fills the container reliably, avoiding flex percentage-height issues */
+          <img
+            src={normalizeUrl(iconUrl)}
+            alt={icon}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          <span className={`flex items-center justify-center w-full h-full ${emojiClass}`}>
+            {icon || '📚'}
+          </span>
+        )}
+
+        {/* Hover overlay */}
         <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-full pointer-events-none">
           {loading ? (
             <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
@@ -85,7 +104,6 @@ const KbIconEditor: React.FC<KbIconEditorProps> = ({
       {/* Dropdown menu */}
       {menuOpen && (
         <>
-          {/* Backdrop */}
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
           <div className="absolute left-1/2 -translate-x-1/2 mt-2 z-20 bg-background border rounded-xl shadow-lg py-1 min-w-[130px] text-sm">
             <button
@@ -114,7 +132,6 @@ const KbIconEditor: React.FC<KbIconEditorProps> = ({
         </>
       )}
 
-      {/* Hidden file input */}
       <input
         ref={inputRef}
         type="file"
