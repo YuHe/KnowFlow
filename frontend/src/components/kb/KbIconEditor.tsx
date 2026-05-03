@@ -65,7 +65,7 @@ const KbIconEditor: React.FC<KbIconEditorProps> = ({
         className={`relative flex items-center justify-center rounded-full overflow-hidden ${sizeClass} group focus:outline-none`}
         disabled={loading}
       >
-        <KbIcon icon={icon} iconUrl={iconUrl} className={sizeClass} emojiClass={emojiClass} />
+        <KbIcon icon={icon} iconUrl={iconUrl} className="w-full h-full" emojiClass={emojiClass} />
         {/* Overlay on hover */}
         <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-full pointer-events-none">
           {loading ? (

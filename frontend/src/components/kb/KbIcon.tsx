@@ -24,6 +24,8 @@ function normalizeUrl(url: string): string {
 
 /**
  * Renders a KB avatar: shows icon_url image when available, otherwise the emoji icon.
+ * When iconUrl is set, the img fills its parent container (use parent for sizing).
+ * When iconUrl is null, renders an emoji span with emojiClass + className applied.
  */
 const KbIcon: React.FC<KbIconProps> = ({ icon, iconUrl, className = '', emojiClass = '' }) => {
   if (iconUrl) {
@@ -32,7 +34,7 @@ const KbIcon: React.FC<KbIconProps> = ({ icon, iconUrl, className = '', emojiCla
       <img
         src={src}
         alt={icon}
-        className={`object-cover rounded-full ${className}`}
+        className={`block object-cover rounded-full ${className}`}
       />
     )
   }
