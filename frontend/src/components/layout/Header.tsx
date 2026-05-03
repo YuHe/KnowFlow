@@ -46,7 +46,7 @@ export function Header({ className }: HeaderProps) {
     >
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2 shrink-0">
-        <img src="/logo.png" alt="KnowFlow" className="h-7 w-7 object-contain" style={{ border: 'none', background: 'transparent' }} />
+        <img src="/logo.png" alt="KnowFlow" className="h-9 w-9 object-contain" style={{ border: 'none', background: 'transparent' }} />
         <span className="font-bold text-lg tracking-tight">KnowFlow</span>
       </Link>
 
