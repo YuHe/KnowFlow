@@ -8,7 +8,7 @@ interface KbIconEditorProps {
   kbId: string
   icon: string
   iconUrl?: string | null
-  /** Size of the clickable area (Tailwind w-*/h-* classes) */
+  /** Size of the clickable area, e.g. "w-20 h-20" */
   sizeClass?: string
   emojiClass?: string
 }
