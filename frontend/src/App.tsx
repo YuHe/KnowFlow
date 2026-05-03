@@ -14,6 +14,7 @@ import DocReadPage from '@/pages/DocReadPage'
 
 // ── Lazily loaded pages ───────────────────────────────────────────────────────
 const DocEditPage = lazy(() => import('@/pages/DocEditPage'))
+const KbSettingsPage = lazy(() => import('@/pages/KbSettingsPage'))
 const SearchResultPage = lazy(() => import('@/pages/SearchResultPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
 const PublicKbPage = lazy(() => import('@/pages/PublicKbPage'))
@@ -98,6 +99,7 @@ export default function App() {
                 <Route index element={<KbHomePage />} />
                 <Route path="docs/:docId" element={<DocReadPage />} />
                 <Route path="docs/:docId/edit" element={<DocEditPage />} />
+                <Route path="settings" element={<KbSettingsPage />} />
               </Route>
             </Route>
           </Route>

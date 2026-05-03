@@ -12,9 +12,10 @@ interface VersionListProps {
   onClose: () => void
 }
 
-const REASON_LABELS: Record<DocumentVersion['snapshot_reason'], string> = {
+const REASON_LABELS: Record<string, string> = {
   manual: '手动保存',
   restore: '从版本恢复',
+  pre_restore: '恢复前快照',
 }
 
 export default function VersionList({ docId, onClose }: VersionListProps) {

@@ -19,8 +19,7 @@ export default function DocViewer({ content, containerRef }: DocViewerProps) {
 
   return (
     <div
-      ref={containerRef}
-      className="prose prose-gray max-w-none"
+      className="doc-content prose prose-gray max-w-none"
       dangerouslySetInnerHTML={{ __html: content }}
     />
   )

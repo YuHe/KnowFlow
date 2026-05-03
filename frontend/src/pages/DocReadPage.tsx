@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useDocStore } from '@/store/docStore';
-import { useAuthStore } from '@/store/authStore';
+import { useKbStore } from '@/store/kbStore';
 import { favoritesApi } from '@/api/favorites';
 import DocViewer from '@/components/doc/DocViewer';
 import OutlinePanel from '@/components/doc/OutlinePanel';
@@ -9,6 +9,7 @@ import CommentPanel from '@/components/doc/CommentPanel';
 import SharePanel from '@/components/doc/SharePanel';
 import VersionList from '@/components/doc/VersionList';
 import ExportMenu from '@/components/doc/ExportMenu';
+import { ROLE_LEVELS } from '@/types';
 
 type PanelType = 'comments' | 'share' | 'versions' | null;
 
@@ -16,7 +17,7 @@ const DocReadPage: React.FC = () => {
   const { kbId, docId } = useParams<{ kbId: string; docId: string }>();
   const navigate = useNavigate();
   const { currentDoc, fetchDoc, isLoading } = useDocStore();
-  const { user } = useAuthStore();
+  const { currentKb } = useKbStore();
   const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [showOutline, setShowOutline] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -49,7 +50,7 @@ const DocReadPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
       </div>
     );
@@ -57,7 +58,7 @@ const DocReadPage: React.FC = () => {
 
   if (!currentDoc) {
     return (
-      <div className="flex h-screen items-center justify-center flex-col gap-3">
+      <div className="flex h-full items-center justify-center flex-col gap-3">
         <p className="text-gray-500">文档不存在或已被删除</p>
         <Link to={`/kb/${kbId}`} className="text-indigo-600 hover:underline text-sm">返回知识库</Link>
       </div>
@@ -68,7 +69,7 @@ const DocReadPage: React.FC = () => {
   const wordCount = currentDoc.word_count || 0;
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden">
+    <div className="flex h-full bg-white overflow-hidden">
       {/* Main Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Action Bar */}
@@ -85,7 +86,8 @@ const DocReadPage: React.FC = () => {
 
           <div className="flex-1" />
 
-          {currentDoc.created_by === user?.id && (
+          {/* Can edit if role is editor or above */}
+          {(ROLE_LEVELS[currentKb?.my_role ?? ''] ?? 0) >= ROLE_LEVELS['editor'] && (
             <button
               onClick={() => navigate(`/kb/${kbId}/docs/${docId}/edit`)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition"

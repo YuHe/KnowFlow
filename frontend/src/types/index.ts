@@ -207,7 +207,7 @@ export interface DocumentVersion {
   document_id: string
   version_num: number
   snapshot_by: string
-  snapshot_reason: 'manual' | 'restore'
+  snapshot_reason: 'manual' | 'restore' | 'pre_restore'
   created_at: string
   snapshot_by_user?: User
 }

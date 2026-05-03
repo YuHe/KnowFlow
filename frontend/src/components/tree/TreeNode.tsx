@@ -10,6 +10,7 @@ interface TreeNodeProps {
   expandedIds: Set<string>
   onSelect: (id: string) => void
   onToggleExpand: (id: string) => void
+  onContextMenu?: (e: React.MouseEvent, nodeId: string) => void
 }
 
 const TreeNode: React.FC<TreeNodeProps> = ({
@@ -21,6 +22,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   expandedIds,
   onSelect,
   onToggleExpand,
+  onContextMenu,
 }) => {
   const isSection = node.type === 'section'
   const isExpanded = expandedIds.has(node.id)
@@ -43,6 +45,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         aria-selected={isSelected}
         aria-expanded={isSection ? isExpanded : undefined}
         onClick={handleClick}
+        onContextMenu={onContextMenu ? (e) => onContextMenu(e, node.id) : undefined}
         className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition select-none mx-1 ${
           isSelected
             ? 'bg-primary/10 text-primary'
@@ -99,6 +102,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               expandedIds={expandedIds}
               onSelect={onSelect}
               onToggleExpand={onToggleExpand}
+              onContextMenu={onContextMenu}
             />
           ))}
         </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import type { Editor } from '@tiptap/react'
 
 interface EditorToolbarProps {
@@ -30,6 +30,31 @@ const Divider = () => <div className="w-px h-5 bg-gray-200 mx-1" />
 export default function EditorToolbar({ editor }: EditorToolbarProps) {
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
+  const [showColorPicker, setShowColorPicker] = useState(false)
+  const colorPickerRef = useRef<HTMLDivElement>(null)
+
+  const TEXT_COLORS = [
+    { label: '默认', value: '' },
+    { label: '红色', value: '#ef4444' },
+    { label: '橙色', value: '#f97316' },
+    { label: '黄色', value: '#eab308' },
+    { label: '绿色', value: '#22c55e' },
+    { label: '蓝色', value: '#3b82f6' },
+    { label: '紫色', value: '#a855f7' },
+    { label: '粉色', value: '#ec4899' },
+    { label: '灰色', value: '#6b7280' },
+  ]
+
+  useEffect(() => {
+    if (!showColorPicker) return
+    const handle = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showColorPicker])
 
   if (!editor) return null
 
@@ -52,6 +77,8 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
   const handleInsertTable = () => {
     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
   }
+
+  const currentColor = editor.getAttributes('textStyle').color || ''
 
   return (
     <div className="border-b border-gray-200 sticky top-0 bg-white z-10 px-3 py-1.5 flex items-center gap-0.5 flex-wrap">
@@ -79,18 +106,14 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 
       <Divider />
 
-      {/* H1 */}
+      {/* Heading dropdown */}
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         active={editor.isActive('heading', { level: 1 })}
         title="标题 1"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h8M4 18h16" />
-        </svg>
+        <span className="text-xs font-bold">H1</span>
       </ToolbarButton>
-
-      {/* H2 */}
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         active={editor.isActive('heading', { level: 2 })}
@@ -98,8 +121,6 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
       >
         <span className="text-xs font-bold">H2</span>
       </ToolbarButton>
-
-      {/* H3 */}
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         active={editor.isActive('heading', { level: 3 })}
@@ -157,6 +178,48 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
         </svg>
       </ToolbarButton>
 
+      {/* Text Color */}
+      <div className="relative" ref={colorPickerRef}>
+        <button
+          type="button"
+          onClick={() => setShowColorPicker((v) => !v)}
+          title="文字颜色"
+          className="w-7 h-7 flex flex-col items-center justify-center rounded text-sm transition text-gray-600 hover:bg-gray-100"
+        >
+          <span className="font-bold text-sm leading-none">A</span>
+          <span
+            className="w-4 h-1 rounded-sm mt-0.5"
+            style={{ backgroundColor: currentColor || '#374151' }}
+          />
+        </button>
+        {showColorPicker && (
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-44">
+            <p className="text-xs text-gray-400 mb-1.5 px-1">文字颜色</p>
+            <div className="grid grid-cols-4 gap-1">
+              {TEXT_COLORS.map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  title={c.label}
+                  onClick={() => {
+                    if (c.value) {
+                      editor.chain().focus().setColor(c.value).run()
+                    } else {
+                      editor.chain().focus().unsetColor().run()
+                    }
+                    setShowColorPicker(false)
+                  }}
+                  className="w-8 h-8 rounded border border-gray-200 hover:scale-110 transition-transform flex items-center justify-center"
+                  style={{ backgroundColor: c.value || '#ffffff' }}
+                >
+                  {!c.value && <span className="text-xs text-gray-400">✕</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Inline Code */}
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleCode().run()}
@@ -165,6 +228,37 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l-3 3 3 3m8-6l3 3-3 3" />
+        </svg>
+      </ToolbarButton>
+
+      <Divider />
+
+      {/* Text Align */}
+      <ToolbarButton
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        active={editor.isActive({ textAlign: 'left' })}
+        title="左对齐"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h10M4 14h16M4 18h10" />
+        </svg>
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        active={editor.isActive({ textAlign: 'center' })}
+        title="居中对齐"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 10h10M4 14h16M7 18h10" />
+        </svg>
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        active={editor.isActive({ textAlign: 'right' })}
+        title="右对齐"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M10 10h10M4 14h16M10 18h10" />
         </svg>
       </ToolbarButton>
 
@@ -293,6 +387,51 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 3v18M14 3v18" />
         </svg>
       </ToolbarButton>
+
+      {/* Table operations (shown when inside table) */}
+      {editor.isActive('table') && (
+        <>
+          <Divider />
+          <ToolbarButton
+            onClick={() => editor.chain().focus().addColumnAfter().run()}
+            title="插入列"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().addRowAfter().run()}
+            title="插入行"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().deleteColumn().run()}
+            title="删除列"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().deleteRow().run()}
+            title="删除行"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            title="删除表格"
+          >
+            <span className="text-xs text-red-500">删表</span>
+          </ToolbarButton>
+        </>
+      )}
     </div>
   )
 }

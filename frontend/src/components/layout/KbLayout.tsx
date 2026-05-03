@@ -1,6 +1,5 @@
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, Link, useLocation, useParams } from 'react-router-dom'
 import { useEffect } from 'react'
-import { useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, MessageSquare, Clock, AlignLeft, Share2 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useKbStore } from '@/store/kbStore'
@@ -10,6 +9,7 @@ import DocTree from '@/components/tree/DocTree'
 
 export function KbLayout() {
   const { kbId } = useParams<{ kbId: string }>()
+  const location = useLocation()
   const { sidebarOpen, outlineOpen, commentPanelOpen, versionPanelOpen, toggleSidebar, openRightPanel, closeAllPanels } =
     useUiStore()
   const { currentKb, fetchKbById } = useKbStore()
@@ -45,6 +45,23 @@ export function KbLayout() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {kbId && <DocTree kbId={kbId} />}
+        </div>
+        {/* KB settings link at bottom */}
+        <div className="px-3 py-2 border-t flex-shrink-0">
+          <Link
+            to={`/kb/${kbId}/settings`}
+            className={cn(
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition',
+              location.pathname.endsWith('/settings')
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted/60',
+            )}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            成员管理
+          </Link>
         </div>
       </aside>
 

@@ -12,6 +12,7 @@ from app.models.user import User
 from app.utils.auth import get_current_active_user
 from app.utils.permissions import ROLE_LEVELS, get_kb_member_role, require_kb_role
 from app.utils.response import err, ok
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(tags=["versions"])
 
@@ -24,6 +25,11 @@ def _version_to_dict(v: DocumentVersion, include_content: bool = False) -> dict:
         "snapshot_reason": v.snapshot_reason,
         "snapshot_by": str(v.snapshot_by) if v.snapshot_by else None,
         "created_at": v.created_at.isoformat(),
+        "snapshot_by_user": {
+            "id": str(v.snapshotter.id),
+            "username": v.snapshotter.username,
+            "display_name": v.snapshotter.display_name,
+        } if v.snapshotter else None,
     }
     if include_content:
         d["content_md"] = v.content_md
@@ -64,6 +70,7 @@ async def list_versions(
 
     result = await db.execute(
         select(DocumentVersion)
+        .options(selectinload(DocumentVersion.snapshotter))
         .where(DocumentVersion.document_id == doc_id)
         .order_by(DocumentVersion.version_num.desc())
     )
@@ -119,7 +126,9 @@ async def get_version(
     await _get_doc_and_check_access(doc_id, current_user, db, "viewer")
 
     result = await db.execute(
-        select(DocumentVersion).where(
+        select(DocumentVersion)
+        .options(selectinload(DocumentVersion.snapshotter))
+        .where(
             DocumentVersion.id == ver_id,
             DocumentVersion.document_id == doc_id,
         )

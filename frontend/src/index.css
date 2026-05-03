@@ -235,7 +235,63 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* Doc tree styles */
+  /* Doc viewer rendered content styles (mirrors ProseMirror styles for read mode) */
+  .doc-content {
+    line-height: 1.75;
+    color: #374151;
+  }
+
+  .doc-content > * + * {
+    @apply mt-3;
+  }
+
+  .doc-content h1 { @apply text-3xl font-bold text-gray-900 mt-8 mb-4; }
+  .doc-content h2 { @apply text-2xl font-bold text-gray-900 mt-6 mb-3; }
+  .doc-content h3 { @apply text-xl font-semibold text-gray-800 mt-5 mb-2; }
+  .doc-content h4 { @apply text-lg font-semibold text-gray-800 mt-4 mb-2; }
+
+  .doc-content p { @apply my-2; }
+
+  .doc-content ul { @apply list-disc pl-6 my-3; }
+  .doc-content ol { @apply list-decimal pl-6 my-3; }
+  .doc-content li { @apply my-1; }
+
+  .doc-content ul[data-type="taskList"] { @apply pl-0 list-none; }
+  .doc-content ul[data-type="taskList"] li { @apply flex items-start gap-2 my-1; }
+  .doc-content ul[data-type="taskList"] li input[type="checkbox"] { @apply mt-1 w-4 h-4 accent-blue-600; }
+
+  .doc-content blockquote {
+    @apply border-l-4 border-primary/40 pl-4 italic text-muted-foreground my-4;
+  }
+
+  .doc-content code {
+    @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-gray-800;
+  }
+
+  .doc-content pre {
+    @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4 text-sm font-mono;
+  }
+
+  .doc-content pre code { @apply bg-transparent p-0 text-inherit; }
+
+  .doc-content a { @apply text-primary underline underline-offset-2 hover:text-primary/80; }
+
+  .doc-content hr { @apply border-border my-6; }
+
+  .doc-content img { @apply max-w-full rounded-lg my-4; }
+
+  .doc-content table { @apply w-full border-collapse my-4 text-sm; }
+  .doc-content table td,
+  .doc-content table th { @apply border border-border p-2 text-left align-top; }
+  .doc-content table th { @apply bg-muted font-semibold; }
+  .doc-content table tr:hover td { @apply bg-muted/30; }
+
+  .doc-content mark { @apply bg-yellow-200 text-yellow-900 px-0.5 rounded; }
+
+  /* TipTap table resize wrapper */
+  .tableWrapper { overflow-x: auto; margin: 1em 0; }
+  .resize-cursor { cursor: col-resize; }
+  .selectedCell { @apply bg-primary/10; }
   .doc-tree-item {
     @apply flex items-center gap-1 px-2 py-1 rounded-md text-sm cursor-pointer transition-colors;
   }

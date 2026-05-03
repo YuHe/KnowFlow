@@ -1,12 +1,31 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTreeStore } from '@/store/treeStore'
 import { docsApi } from '@/api/docs'
 import TreeNode from './TreeNode'
+import TreeContextMenu from './TreeContextMenu'
+import type { TreeNode as TreeNodeType } from '@/types'
 
 interface DocTreeProps {
   kbId: string
   readOnly?: boolean
+}
+
+interface ContextMenuState {
+  nodeId: string
+  x: number
+  y: number
+}
+
+// Convert store TreeNodes to the flat shape TreeContextMenu expects
+function flattenForMenu(nodes: TreeNodeType[]): Array<{ id: string; title: string; type: 'folder' | 'doc'; children?: Array<any>; parentId?: string | null }> {
+  return nodes.map((n) => ({
+    id: n.id,
+    title: n.title,
+    type: n.type === 'section' ? 'folder' : 'doc',
+    parentId: n.parent_id,
+    children: n.children ? flattenForMenu(n.children) : [],
+  }))
 }
 
 const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
@@ -18,10 +37,14 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     expandedIds,
     toggleExpand,
     isLoading,
+    updateSection,
+    removeSection,
+    removeDoc,
   } = useTreeStore()
 
   const navigate = useNavigate()
   const [isCreating, setIsCreating] = useState(false)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
   const handleCreateDoc = async () => {
     if (isCreating) return
@@ -47,6 +70,117 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     }
   }
 
+  const handleContextMenu = useCallback((e: React.MouseEvent, nodeId: string) => {
+    if (readOnly) return
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ nodeId, x: e.clientX, y: e.clientY })
+  }, [readOnly])
+
+  // Context menu operations
+  const handleCreateDocInSection = async (parentId: string | null) => {
+    const sectionId = parentId?.startsWith('section-') ? parentId.slice(8) : null
+    try {
+      const doc = await docsApi.createDoc(kbId, {
+        title: '无标题文档',
+        content_md: '',
+        section_id: sectionId,
+      })
+      await fetchTree(kbId)
+      navigate(`/kb/${kbId}/docs/${doc.id}/edit`)
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleCreateSection = async (parentId: string | null) => {
+    const sectionParentId = parentId?.startsWith('section-') ? parentId.slice(8) : null
+    try {
+      const section = await docsApi.createSection(kbId, {
+        title: '新目录',
+        parent_id: sectionParentId,
+      })
+      // Add to tree store
+      useTreeStore.getState().addSection(section)
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleRename = async (nodeId: string, newTitle: string) => {
+    if (nodeId.startsWith('section-')) {
+      const sectionId = nodeId.slice(8)
+      try {
+        await docsApi.updateSection(kbId, sectionId, { title: newTitle })
+        updateSection(sectionId, { title: newTitle })
+      } catch {
+        // ignore
+      }
+    } else if (nodeId.startsWith('doc-')) {
+      const docId = nodeId.slice(4)
+      try {
+        await docsApi.updateDoc(docId, { title: newTitle })
+        useTreeStore.getState().updateDoc(docId, { title: newTitle })
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const handleDelete = async (nodeId: string) => {
+    if (nodeId.startsWith('section-')) {
+      const sectionId = nodeId.slice(8)
+      try {
+        await docsApi.deleteSection(kbId, sectionId)
+        removeSection(sectionId)
+      } catch {
+        // ignore
+      }
+    } else if (nodeId.startsWith('doc-')) {
+      const docId = nodeId.slice(4)
+      try {
+        await docsApi.deleteDoc(docId)
+        removeDoc(docId)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const handleMove = async (nodeId: string, targetParentId: string | null) => {
+    if (nodeId.startsWith('doc-')) {
+      const docId = nodeId.slice(4)
+      const sectionId = targetParentId?.startsWith('section-') ? targetParentId.slice(8) : null
+      try {
+        await docsApi.moveDoc(docId, { section_id: sectionId })
+        await fetchTree(kbId)
+      } catch {
+        // ignore
+      }
+    } else if (nodeId.startsWith('section-')) {
+      const sectionId = nodeId.slice(8)
+      const parentId = targetParentId?.startsWith('section-') ? targetParentId.slice(8) : null
+      try {
+        await docsApi.updateSection(kbId, sectionId, { parent_id: parentId })
+        await fetchTree(kbId)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    document.addEventListener('click', close)
+    document.addEventListener('contextmenu', close)
+    return () => {
+      document.removeEventListener('click', close)
+      document.removeEventListener('contextmenu', close)
+    }
+  }, [contextMenu])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground text-sm">
@@ -58,6 +192,8 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
       </div>
     )
   }
+
+  const flatTree = flattenForMenu(treeNodes)
 
   return (
     <div className="py-2">
@@ -88,6 +224,7 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
             expandedIds={expandedIds}
             onSelect={handleSelectNode}
             onToggleExpand={toggleExpand}
+            onContextMenu={handleContextMenu}
           />
         ))
       ) : (
@@ -97,6 +234,22 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
           </svg>
           暂无文档
         </div>
+      )}
+
+      {contextMenu && (
+        <TreeContextMenu
+          nodeId={contextMenu.nodeId}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          kbId={kbId}
+          tree={flatTree}
+          onClose={() => setContextMenu(null)}
+          onCreateDoc={handleCreateDocInSection}
+          onCreateFolder={handleCreateSection}
+          onRename={handleRename}
+          onDelete={handleDelete}
+          onMove={handleMove}
+        />
       )}
     </div>
   )

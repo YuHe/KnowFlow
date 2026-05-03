@@ -14,6 +14,9 @@ import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import CharacterCount from '@tiptap/extension-character-count'
+import TextStyle from '@tiptap/extension-text-style'
+import Color from '@tiptap/extension-color'
+import TextAlign from '@tiptap/extension-text-align'
 import { createLowlight, common } from 'lowlight'
 import { uploadImage } from '../../api/upload'
 
@@ -62,6 +65,9 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
       TaskList,
       TaskItem.configure({ nested: true }),
       CharacterCount,
+      TextStyle,
+      Color,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
     ],
     content,
     editable,
