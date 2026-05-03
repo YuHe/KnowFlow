@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/store/authStore'
+import logoUrl from '/logo.png?url'
 import { useToast } from '@/components/ui/use-toast'
 import { getErrorMessage } from '@/utils'
 import { authApi } from '@/api/auth'
@@ -56,7 +57,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-3">
-            <img src="/logo.png" alt="KnowFlow" className="h-12 w-12 object-contain" style={{ border: 'none', background: 'transparent' }} />
+            <img src={logoUrl} alt="KnowFlow" className="h-12 w-12 object-contain" style={{ border: 'none', background: 'transparent' }} />
             <span className="text-2xl font-bold">KnowFlow</span>
           </div>
           <p className="text-muted-foreground">创建你的账号</p>

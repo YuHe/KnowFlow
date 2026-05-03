@@ -1,6 +1,7 @@
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { Search, Bell, ChevronDown, LogOut, User, Settings, Star } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import logoUrl from '/logo.png?url'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +56,7 @@ export function Header({ className }: HeaderProps) {
     >
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2 shrink-0">
-        <img src="/logo.png" alt="KnowFlow" className="h-9 w-9 object-contain" style={{ border: 'none', background: 'transparent' }} />
+        <img src={logoUrl} alt="KnowFlow" className="h-9 w-9 object-contain" style={{ border: 'none', background: 'transparent' }} />
         <span className="font-bold text-lg tracking-tight">KnowFlow</span>
       </Link>
 

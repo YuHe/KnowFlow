@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import logoUrl from '/logo.png?url';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ const LoginPage: React.FC = () => {
           {/* Logo / Brand */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center mb-4">
-              <img src="/logo.png" alt="KnowFlow" className="w-20 h-20 object-contain" style={{ border: 'none', background: 'transparent' }} />
+              <img src={logoUrl} alt="KnowFlow" className="w-20 h-20 object-contain" style={{ border: 'none', background: 'transparent' }} />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">KnowFlow</h1>
             <p className="text-sm text-gray-500 mt-1">登录您的知识库</p>

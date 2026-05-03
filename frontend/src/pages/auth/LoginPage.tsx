@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import logoUrl from '/logo.png?url'
 import { useAuthStore } from '@/store/authStore'
 import { useToast } from '@/components/ui/use-toast'
 import { getErrorMessage } from '@/utils'
@@ -36,7 +37,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-3">
-            <img src="/logo.png" alt="KnowFlow" className="h-12 w-12 object-contain" style={{ border: 'none', background: 'transparent' }} />
+            <img src={logoUrl} alt="KnowFlow" className="h-12 w-12 object-contain" style={{ border: 'none', background: 'transparent' }} />
             <span className="text-2xl font-bold">KnowFlow</span>
           </div>
           <p className="text-muted-foreground">登录到你的知识库</p>

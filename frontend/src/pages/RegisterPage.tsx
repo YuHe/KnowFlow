@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../api/auth';
+import logoUrl from '/logo.png?url';
 
 interface RegisterForm {
   username: string;
@@ -106,7 +107,7 @@ const RegisterPage: React.FC = () => {
           {/* Logo / Brand */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center mb-4">
-              <img src="/logo.png" alt="KnowFlow" className="w-20 h-20 object-contain" style={{ border: 'none', background: 'transparent' }} />
+              <img src={logoUrl} alt="KnowFlow" className="w-20 h-20 object-contain" style={{ border: 'none', background: 'transparent' }} />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">创建账号</h1>
             <p className="text-sm text-gray-500 mt-1">加入 KnowFlow 知识库</p>
