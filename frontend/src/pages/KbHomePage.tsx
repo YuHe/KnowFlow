@@ -10,7 +10,7 @@ const KbHomePage: React.FC = () => {
   const navigate = useNavigate();
   const { currentKb, fetchKbById, isLoadingKbs: kbLoading } = useKbStore();
   const { recentDocs, fetchRecentKbDocs } = useDocStore();
-  const { selectedNodeId, selectNode, fetchTree } = useTreeStore();
+  const { fetchTree } = useTreeStore();
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreateDoc = async () => {
@@ -34,13 +34,6 @@ const KbHomePage: React.FC = () => {
     }
   }, [kbId]);
 
-  useEffect(() => {
-    if (selectedNodeId && selectedNodeId.startsWith('doc-') && kbId) {
-      const docId = selectedNodeId.replace('doc-', '');
-      navigate(`/kb/${kbId}/docs/${docId}`);
-      selectNode(null);
-    }
-  }, [selectedNodeId, kbId]);
 
   if (kbLoading) {
     return (
