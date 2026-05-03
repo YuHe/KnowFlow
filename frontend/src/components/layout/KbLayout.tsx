@@ -77,8 +77,10 @@ export function KbLayout() {
             <Link to="/" className="text-muted-foreground hover:text-foreground transition">
               <ChevronLeft className="w-4 h-4" />
             </Link>
-            <span className="text-lg">{currentKb?.icon || '📚'}</span>
-            <span className="text-sm font-semibold truncate flex-1 min-w-0">{currentKb?.name}</span>
+            <Link to="/" className="flex items-center gap-2 min-w-0 flex-1 hover:opacity-80 transition">
+              <span className="text-lg">{currentKb?.icon || '📚'}</span>
+              <span className="text-sm font-semibold truncate">{currentKb?.name}</span>
+            </Link>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">

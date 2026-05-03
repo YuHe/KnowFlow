@@ -7,6 +7,7 @@ import { useDocStore } from '@/store/docStore';
 import { useKbStore } from '@/store/kbStore';
 import { favoritesApi } from '@/api/favorites';
 import { docsApi } from '@/api/docs';
+import { assetsApi } from '@/api/assets';
 import { htmlToMarkdown } from '@/components/editor/EditorCore';
 import EditorCore from '@/components/editor/EditorCore';
 import EditorToolbar from '@/components/editor/EditorToolbar';
@@ -76,11 +77,17 @@ const DocReadPage: React.FC = () => {
   }, [kbId, docId]);
 
   // Auto-expand tree to show the current doc when navigating directly via URL.
-  // setSelectedDocId keeps the store in sync so fetchTree (if it fires later) can also expand.
+  // Uses pendingExpandDocId (not selectedNodeId) to avoid triggering KbHomePage's
+  // selectedNodeId-based navigation side effect.
   useEffect(() => {
     if (docId) {
-      useTreeStore.getState().setSelectedDocId(docId);
-      useTreeStore.getState().expandToDoc(docId);
+      const store = useTreeStore.getState();
+      // If tree already has data, expand immediately; otherwise queue for after fetchTree
+      if (store.docs.length > 0) {
+        store.expandToDoc(docId);
+      } else {
+        store.setPendingExpandDocId(docId);
+      }
     }
   }, [docId]);
 
@@ -118,6 +125,17 @@ const DocReadPage: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDoc, docId]);
+
+  // ── File upload (for editor toolbar) ──────────────────────────────
+  const handleFileUpload = useCallback(async (file: File): Promise<string | null> => {
+    if (!kbId) return null;
+    try {
+      const asset = await assetsApi.uploadAsset(file, { kb_id: kbId, doc_id: docId });
+      return asset.url;
+    } catch {
+      return null;
+    }
+  }, [kbId, docId]);
 
   // ── Edit-mode helpers ──────────────────────────────────────────────
   const handleEnterEdit = useCallback(() => {
@@ -274,6 +292,7 @@ const DocReadPage: React.FC = () => {
             onZoomChange={setZoom}
             sourceMode={sourceMode}
             onSourceModeChange={setSourceMode}
+            onFileUpload={handleFileUpload}
           />
         )}
 
@@ -332,7 +351,7 @@ const DocReadPage: React.FC = () => {
         {/* Top Action Bar */}
         <div className="h-12 border-b border-gray-200 flex items-center px-4 gap-2 flex-shrink-0 bg-white">
           <Link
-            to={`/kb/${kbId}`}
+            to="/"
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition mr-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

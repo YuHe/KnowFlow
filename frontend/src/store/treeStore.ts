@@ -11,6 +11,9 @@ interface TreeState {
   expandedIds: Set<string>
   isLoading: boolean
   error: string | null
+  // Remembers which doc should be expanded-to after the next fetchTree completes
+  // (set by DocReadPage on direct URL navigation, cleared after use)
+  pendingExpandDocId: string | null
 
   // Actions
   fetchTree: (kbId: string) => Promise<void>
@@ -20,6 +23,7 @@ interface TreeState {
   expandAll: () => void
   collapseAll: () => void
   expandToDoc: (docId: string) => void   // expand all ancestors of a doc
+  setPendingExpandDocId: (docId: string | null) => void
   selectNode: (id: string | null) => void
   setSelectedDocId: (docId: string | null) => void
   addSection: (section: Section) => void
@@ -103,6 +107,7 @@ export const useTreeStore = create<TreeState>((set, get) => ({
   expandedIds: new Set<string>(),
   isLoading: false,
   error: null,
+  pendingExpandDocId: null,
 
   fetchTree: async (kbId: string) => {
     set({ isLoading: true, error: null })
@@ -110,10 +115,11 @@ export const useTreeStore = create<TreeState>((set, get) => ({
       const { sections, docs } = await docsApi.getTree(kbId)
       const treeNodes = buildTreeNodes(sections, docs, null, null)
       set({ sections, docs, treeNodes, isLoading: false })
-      // After tree is loaded, re-run expandToDoc for the currently selected doc
-      const { selectedDocId } = get()
-      if (selectedDocId) {
-        get().expandToDoc(selectedDocId)
+      // After tree is loaded, expand to the pending doc (set by DocReadPage on direct URL nav)
+      const { pendingExpandDocId } = get()
+      if (pendingExpandDocId) {
+        get().expandToDoc(pendingExpandDocId)
+        set({ pendingExpandDocId: null })
       }
     } catch (error) {
       set({
@@ -200,6 +206,10 @@ export const useTreeStore = create<TreeState>((set, get) => ({
 
   setSelectedDocId: (docId: string | null) => {
     set({ selectedDocId: docId, selectedNodeId: docId ? `doc-${docId}` : null })
+  },
+
+  setPendingExpandDocId: (docId: string | null) => {
+    set({ pendingExpandDocId: docId })
   },
 
   addSection: (section: Section) => {
