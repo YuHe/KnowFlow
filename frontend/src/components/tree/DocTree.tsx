@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useTreeStore } from '@/store/treeStore'
 import { docsApi } from '@/api/docs'
 import TreeNode from './TreeNode'
@@ -44,6 +44,7 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
   } = useTreeStore()
 
   const navigate = useNavigate()
+  const { docId: activeDocId } = useParams<{ docId?: string }>()
   const [isCreating, setIsCreating] = useState(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const dragNodeIdRef = useRef<string | null>(null)
@@ -359,6 +360,7 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
             kbId={kbId}
             readOnly={readOnly}
             selectedNodeId={selectedNodeId}
+            activeDocId={activeDocId}
             expandedIds={expandedIds}
             onSelect={handleSelectNode}
             onToggleExpand={toggleExpand}

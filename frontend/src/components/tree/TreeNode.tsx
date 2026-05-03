@@ -7,6 +7,7 @@ interface TreeNodeProps {
   kbId: string
   readOnly: boolean
   selectedNodeId: string | null
+  activeDocId?: string | null
   expandedIds: Set<string>
   onSelect: (id: string) => void
   onToggleExpand: (id: string) => void
@@ -22,6 +23,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   kbId,
   readOnly,
   selectedNodeId,
+  activeDocId,
   expandedIds,
   onSelect,
   onToggleExpand,
@@ -36,6 +38,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const isExpandable = isSection || (isDocument && hasChildren)
   const isExpanded = expandedIds.has(node.id)
   const isSelected = selectedNodeId === node.id
+  const isActive = isDocument && !!activeDocId && node.id === `doc-${activeDocId}`
   const indent = depth * 14
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null)
 
@@ -107,11 +110,13 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition select-none mx-1 ${
-          isSelected
-            ? 'bg-primary/10 text-primary'
-            : dropPosition === 'inside'
-              ? 'bg-blue-50 border border-blue-300 text-blue-700'
-              : 'text-muted-foreground hover:bg-muted/60'
+          isActive
+            ? 'bg-indigo-100 text-indigo-700 font-semibold'
+            : isSelected
+              ? 'bg-primary/10 text-primary'
+              : dropPosition === 'inside'
+                ? 'bg-blue-50 border border-blue-300 text-blue-700'
+                : 'text-muted-foreground hover:bg-muted/60'
         }`}
         style={{ paddingLeft: `${indent + 8}px` }}
       >
@@ -166,6 +171,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               kbId={kbId}
               readOnly={readOnly}
               selectedNodeId={selectedNodeId}
+              activeDocId={activeDocId}
               expandedIds={expandedIds}
               onSelect={onSelect}
               onToggleExpand={onToggleExpand}
