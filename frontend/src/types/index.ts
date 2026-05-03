@@ -179,6 +179,7 @@ export interface DocumentListItem {
   word_count: number
   created_by: string
   updated_by: string
+  created_at: string
   updated_at: string
   created_by_user?: User
   updated_by_user?: User

@@ -39,7 +39,7 @@ export const useDocStore = create<DocState>((set, get) => ({
   error: null,
 
   fetchDoc: async (_kbId: string, docId: string) => {
-    set({ isLoading: true, error: null })
+    set({ isLoading: true, error: null, currentDoc: null })
     try {
       const doc = await docsApi.getDoc(docId)
       set({ currentDoc: doc, isLoading: false, isDirty: false, saveStatus: 'saved' })
@@ -50,7 +50,7 @@ export const useDocStore = create<DocState>((set, get) => ({
 
   fetchRecentKbDocs: async (kbId: string) => {
     try {
-      const result = await docsApi.getDocs(kbId, { page: 1, page_size: 10 })
+      const result = await docsApi.getDocs(kbId, { page: 1, page_size: 10, order_by: 'updated_at' })
       const items = Array.isArray(result) ? result : (result as { items?: DocumentListItem[] }).items ?? []
       set({ recentDocs: items })
     } catch {

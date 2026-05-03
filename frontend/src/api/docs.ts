@@ -21,7 +21,7 @@ export const docsApi = {
   // ── Documents ──────────────────────────────────────────────────────────
   getDocs: async (
     kbId: string,
-    params?: { section_id?: string | null; page?: number; page_size?: number },
+    params?: { section_id?: string | null; page?: number; page_size?: number; order_by?: string },
   ): Promise<PaginatedData<DocumentListItem>> => {
     const response = await apiClient.get<ApiResponse<PaginatedData<DocumentListItem>>>(
       `/kb/${kbId}/docs`,

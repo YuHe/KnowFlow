@@ -19,6 +19,7 @@ const KbHomePage: React.FC = () => {
     try {
       const doc = await docsApi.createDoc(kbId, { title: '无标题文档', content_md: '' });
       await fetchTree(kbId);
+      await fetchRecentKbDocs(kbId);
       navigate(`/kb/${kbId}/docs/${doc.id}`, { state: { startEditing: true } });
     } finally {
       setIsCreating(false);
@@ -90,26 +91,37 @@ const KbHomePage: React.FC = () => {
                   <Link
                     key={doc.id}
                     to={`/kb/${kbId}/docs/${doc.id}`}
-                    className="flex items-center gap-3 px-4 py-3 bg-background border rounded-xl hover:border-primary/30 transition"
+                    className="flex items-start gap-3 px-4 py-3 bg-background border rounded-xl hover:border-primary/30 transition"
                   >
-                    <svg className="w-4 h-4 text-primary/60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-primary/60 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate block">{doc.title || '无标题'}</span>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      {doc.updated_by_user && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-medium">
-                            {doc.updated_by_user.display_name?.[0] || doc.updated_by_user.username?.[0] || 'U'}
-                          </div>
-                          <span>{doc.updated_by_user.display_name || doc.updated_by_user.username}</span>
-                        </div>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString() : ''}
-                      </span>
+                      <p className="text-sm font-medium truncate">{doc.title || '无标题'}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+                        {doc.created_by_user && (
+                          <span className="flex items-center gap-1">
+                            <span className="inline-flex w-4 h-4 rounded-full bg-primary/10 items-center justify-center text-primary font-medium text-[10px]">
+                              {(doc.created_by_user.display_name || doc.created_by_user.username)?.[0]?.toUpperCase()}
+                            </span>
+                            创建：{doc.created_by_user.display_name || doc.created_by_user.username}
+                          </span>
+                        )}
+                        {doc.created_at && (
+                          <span>{new Date(doc.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                        )}
+                        {doc.updated_by_user && (
+                          <span className="flex items-center gap-1">
+                            <span className="inline-flex w-4 h-4 rounded-full bg-green-100 items-center justify-center text-green-600 font-medium text-[10px]">
+                              {(doc.updated_by_user.display_name || doc.updated_by_user.username)?.[0]?.toUpperCase()}
+                            </span>
+                            修改：{doc.updated_by_user.display_name || doc.updated_by_user.username}
+                          </span>
+                        )}
+                        {doc.updated_at && (
+                          <span>{new Date(doc.updated_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                        )}
+                      </div>
                     </div>
                   </Link>
                 ))}

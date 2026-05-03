@@ -79,6 +79,23 @@ def _doc_to_dict(doc: Document) -> dict:
     }
 
 
+def _user_mini(user) -> dict | None:
+    if not user:
+        return None
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "display_name": user.display_name or user.username,
+    }
+
+
+def _doc_to_list_dict(doc: Document) -> dict:
+    d = _doc_to_dict(doc)
+    d["created_by_user"] = _user_mini(doc.creator)
+    d["updated_by_user"] = _user_mini(doc.updater)
+    return d
+
+
 def _count_words(text: str) -> int:
     return len(text.split()) if text else 0
 
@@ -98,6 +115,7 @@ async def _doc_or_404(doc_id: uuid.UUID, db: AsyncSession) -> Document:
 async def list_docs(
     kb_id: uuid.UUID,
     section_id: Optional[uuid.UUID] = None,
+    order_by: str = "sort_order",
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
@@ -105,14 +123,21 @@ async def list_docs(
     role: str = Depends(require_kb_role("viewer")),
 ):
     from sqlalchemy import func
+    from sqlalchemy.orm import selectinload
 
     stmt = select(Document).where(Document.knowledge_base_id == kb_id)
     if section_id is not None:
         stmt = stmt.where(Document.section_id == section_id)
-    stmt = stmt.order_by(Document.sort_order.asc())
+    if order_by == "updated_at":
+        stmt = stmt.order_by(Document.updated_at.desc())
+    else:
+        stmt = stmt.order_by(Document.sort_order.asc())
+    stmt = stmt.options(selectinload(Document.creator), selectinload(Document.updater))
 
     # Count total
-    count_stmt = select(func.count()).select_from(stmt.subquery())
+    count_stmt = select(func.count()).select_from(
+        select(Document).where(Document.knowledge_base_id == kb_id).subquery()
+    )
     total_result = await db.execute(count_stmt)
     total = total_result.scalar() or 0
 
@@ -120,7 +145,7 @@ async def list_docs(
     stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(stmt)
     docs = result.scalars().all()
-    return paginate([_doc_to_dict(d) for d in docs], total, page, page_size)
+    return paginate([_doc_to_list_dict(d) for d in docs], total, page, page_size)
 
 
 @router.post("/kb/{kb_id}/docs", status_code=201)
