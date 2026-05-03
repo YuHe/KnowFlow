@@ -248,7 +248,9 @@ const DocReadPage: React.FC = () => {
   };
 
   // ── Loading / not found ────────────────────────────────────────────
-  if (isLoading) {
+  // Only show loading spinner when we don't have a doc yet (initial load).
+  // If currentDoc is already loaded, keep showing it even while refreshing.
+  if (isLoading && !currentDoc) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />

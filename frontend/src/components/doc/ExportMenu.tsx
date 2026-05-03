@@ -87,10 +87,15 @@ export default function ExportMenu({ docId, docTitle }: ExportMenuProps) {
       const a = document.createElement('a')
       a.href = url
       a.download = `${docTitle || 'document'}.${option.ext}`
+      a.style.display = 'none'
+      a.rel = 'noopener'
       document.body.appendChild(a)
       a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      // Delay revoke to ensure download starts (Safari needs extra time)
+      setTimeout(() => {
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }, 1000)
       toast({ title: `已导出为 ${option.ext.toUpperCase()}` })
     } catch (err: any) {
       // Try to extract error message from blob error response
