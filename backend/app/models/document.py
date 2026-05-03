@@ -153,6 +153,12 @@ class Document(Base):
         nullable=True,
         index=True,
     )
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     sort_order: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
@@ -203,6 +209,20 @@ class Document(Base):
     )
     section: Mapped["Section | None"] = relationship(
         "Section", back_populates="documents", lazy="select"
+    )
+    parent: Mapped["Document | None"] = relationship(
+        "Document",
+        back_populates="children",
+        remote_side="Document.id",
+        foreign_keys="Document.parent_id",
+        lazy="select",
+    )
+    children: Mapped[list["Document"]] = relationship(
+        "Document",
+        back_populates="parent",
+        foreign_keys="Document.parent_id",
+        cascade="all, delete-orphan",
+        lazy="select",
     )
     template: Mapped["DocumentTemplate | None"] = relationship(
         "DocumentTemplate", back_populates="documents", lazy="select"

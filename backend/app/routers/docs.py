@@ -31,6 +31,7 @@ router = APIRouter(tags=["documents"])
 class DocCreate(BaseModel):
     title: str = Field("Untitled", max_length=512)
     section_id: Optional[uuid.UUID] = None
+    parent_id: Optional[uuid.UUID] = None
     content_md: str = ""
     content_html: str = ""
     template_id: Optional[uuid.UUID] = None
@@ -40,6 +41,7 @@ class DocCreate(BaseModel):
 class DocUpdate(BaseModel):
     title: Optional[str] = Field(None, max_length=512)
     section_id: Optional[uuid.UUID] = None
+    parent_id: Optional[uuid.UUID] = None
     content_md: Optional[str] = None
     content_html: Optional[str] = None
     sort_order: Optional[int] = None
@@ -49,6 +51,7 @@ class DocUpdate(BaseModel):
 
 class DocMoveRequest(BaseModel):
     section_id: Optional[uuid.UUID] = None
+    parent_id: Optional[uuid.UUID] = None
     sort_order: int = 0
     knowledge_base_id: Optional[uuid.UUID] = None
 
@@ -61,6 +64,7 @@ def _doc_to_dict(doc: Document) -> dict:
         "id": str(doc.id),
         "knowledge_base_id": str(doc.knowledge_base_id),
         "section_id": str(doc.section_id) if doc.section_id else None,
+        "parent_id": str(doc.parent_id) if doc.parent_id else None,
         "title": doc.title,
         "content_md": doc.content_md,
         "content_html": doc.content_html,
@@ -130,6 +134,7 @@ async def create_doc(
     doc = Document(
         knowledge_base_id=kb_id,
         section_id=payload.section_id,
+        parent_id=payload.parent_id,
         title=payload.title,
         content_md=payload.content_md,
         content_html=payload.content_html,
@@ -178,6 +183,8 @@ async def update_doc(
         doc.title = payload.title
     if payload.section_id is not None:
         doc.section_id = payload.section_id
+    if payload.parent_id is not None:
+        doc.parent_id = payload.parent_id
     if payload.content_md is not None:
         doc.content_md = payload.content_md
         doc.word_count = _count_words(payload.content_md)
@@ -246,6 +253,7 @@ async def move_doc(
         doc.knowledge_base_id = payload.knowledge_base_id
 
     doc.section_id = payload.section_id
+    doc.parent_id = payload.parent_id
     doc.sort_order = payload.sort_order
     doc.updated_by = current_user.id
     await db.flush()

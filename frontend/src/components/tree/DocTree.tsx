@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTreeStore } from '@/store/treeStore'
 import { docsApi } from '@/api/docs'
@@ -36,6 +36,7 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     selectNode,
     expandedIds,
     toggleExpand,
+    expandNode,
     isLoading,
     updateSection,
     removeSection,
@@ -45,6 +46,7 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
   const navigate = useNavigate()
   const [isCreating, setIsCreating] = useState(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const dragNodeIdRef = useRef<string | null>(null)
 
   const handleCreateDoc = async () => {
     if (isCreating) return
@@ -52,7 +54,6 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     try {
       const doc = await docsApi.createDoc(kbId, { title: '无标题文档', content_md: '' })
       await fetchTree(kbId)
-      // Navigate to doc page and auto-enter edit mode
       navigate(`/kb/${kbId}/docs/${doc.id}`, { state: { startEditing: true } })
     } finally {
       setIsCreating(false)
@@ -78,16 +79,92 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     setContextMenu({ nodeId, x: e.clientX, y: e.clientY })
   }, [readOnly])
 
+  // Drag & drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, nodeId: string) => {
+    dragNodeIdRef.current = nodeId
+    e.dataTransfer.setData('text/plain', nodeId)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, nodeId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetNodeId: string) => {
+    e.preventDefault()
+    const sourceNodeId = dragNodeIdRef.current || e.dataTransfer.getData('text/plain')
+    dragNodeIdRef.current = null
+
+    if (!sourceNodeId || sourceNodeId === targetNodeId) return
+
+    // Prevent dropping a node into its own descendants
+    const isDescendant = (parentId: string, childId: string, nodes: TreeNodeType[]): boolean => {
+      const findNode = (id: string, list: TreeNodeType[]): TreeNodeType | null => {
+        for (const n of list) {
+          if (n.id === id) return n
+          const found = findNode(id, n.children || [])
+          if (found) return found
+        }
+        return null
+      }
+      const parent = findNode(parentId, nodes)
+      if (!parent) return false
+      const checkChildren = (node: TreeNodeType): boolean => {
+        if (!node.children) return false
+        for (const child of node.children) {
+          if (child.id === childId) return true
+          if (checkChildren(child)) return true
+        }
+        return false
+      }
+      return checkChildren(parent)
+    }
+
+    if (isDescendant(sourceNodeId, targetNodeId, treeNodes)) return
+
+    try {
+      if (sourceNodeId.startsWith('doc-')) {
+        const docId = sourceNodeId.slice(4)
+        if (targetNodeId.startsWith('doc-')) {
+          // doc → doc: make it a child of target doc
+          const targetDocId = targetNodeId.slice(4)
+          await docsApi.moveDoc(docId, { section_id: null, parent_id: targetDocId })
+          expandNode(targetNodeId)
+        } else if (targetNodeId.startsWith('section-')) {
+          // doc → section: move to section
+          const targetSectionId = targetNodeId.slice(8)
+          await docsApi.moveDoc(docId, { section_id: targetSectionId, parent_id: null })
+          expandNode(targetNodeId)
+        }
+      } else if (sourceNodeId.startsWith('section-')) {
+        const sectionId = sourceNodeId.slice(8)
+        if (targetNodeId.startsWith('section-')) {
+          // section → section: make it a child section
+          const targetSectionId = targetNodeId.slice(8)
+          await docsApi.updateSection(kbId, sectionId, { parent_id: targetSectionId })
+          expandNode(targetNodeId)
+        }
+      }
+      await fetchTree(kbId)
+    } catch {
+      // ignore errors silently
+    }
+  }, [kbId, fetchTree, expandNode, treeNodes])
+
   // Context menu operations
   const handleCreateDocInSection = async (parentId: string | null) => {
     const sectionId = parentId?.startsWith('section-') ? parentId.slice(8) : null
+    const parentDocId = parentId?.startsWith('doc-') ? parentId.slice(4) : null
     try {
       const doc = await docsApi.createDoc(kbId, {
         title: '无标题文档',
         content_md: '',
         section_id: sectionId,
+        parent_id: parentDocId,
       })
       await fetchTree(kbId)
+      if (parentId) expandNode(parentId)
       navigate(`/kb/${kbId}/docs/${doc.id}`, { state: { startEditing: true } })
     } catch {
       // ignore
@@ -101,7 +178,6 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
         title: '新目录',
         parent_id: sectionParentId,
       })
-      // Add to tree store
       useTreeStore.getState().addSection(section)
     } catch {
       // ignore
@@ -152,8 +228,9 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     if (nodeId.startsWith('doc-')) {
       const docId = nodeId.slice(4)
       const sectionId = targetParentId?.startsWith('section-') ? targetParentId.slice(8) : null
+      const parentDocId = targetParentId?.startsWith('doc-') ? targetParentId.slice(4) : null
       try {
-        await docsApi.moveDoc(docId, { section_id: sectionId })
+        await docsApi.moveDoc(docId, { section_id: sectionId, parent_id: parentDocId })
         await fetchTree(kbId)
       } catch {
         // ignore
@@ -226,6 +303,9 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
             onSelect={handleSelectNode}
             onToggleExpand={toggleExpand}
             onContextMenu={handleContextMenu}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
           />
         ))
       ) : (

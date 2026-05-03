@@ -152,6 +152,7 @@ export interface Document {
   id: string          // UUID
   knowledge_base_id: string
   section_id: string | null
+  parent_id: string | null
   sort_order: number
   title: string
   content_md: string
@@ -172,6 +173,7 @@ export interface DocumentListItem {
   id: string
   knowledge_base_id: string
   section_id: string | null
+  parent_id: string | null
   sort_order: number
   title: string
   word_count: number
@@ -187,6 +189,7 @@ export interface DocCreate {
   content_md?: string
   content_html?: string
   section_id?: string | null
+  parent_id?: string | null
   template_id?: string | null
 }
 
@@ -195,6 +198,7 @@ export interface DocUpdate {
   content_md?: string
   content_html?: string
   section_id?: string | null
+  parent_id?: string | null
   is_public?: boolean
   word_count?: number
   is_manual_save?: boolean  // if true, backend creates version snapshot
@@ -244,6 +248,13 @@ export interface DocumentFavorite {
   doc_title?: string
   kb_name?: string
   created_at: string
+  document?: {
+    id: string
+    title: string
+    knowledge_base_id: string
+    section_id: string | null
+    updated_at: string
+  }
 }
 
 // ============ Document Template ============

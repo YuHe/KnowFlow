@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { favoritesApi } from '../api/favorites';
 import { templatesApi } from '../api/templates';
@@ -8,6 +9,7 @@ import type { ApiResponse, User, DocumentFavorite, DocumentTemplate } from '../t
 type TabType = 'profile' | 'password' | 'favorites' | 'templates';
 
 const ProfilePage: React.FC = () => {
+  const navigate = useNavigate();
   const { user, setUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   const [profileForm, setProfileForm] = useState({
@@ -238,22 +240,26 @@ const ProfilePage: React.FC = () => {
                 ) : (
                   <div className="space-y-2">
                     {favorites.map((fav) => (
-                      <a
+                      <div
                         key={fav.id}
-                        href={`/favorites/${fav.document_id}`}
-                        className="flex items-center gap-3 px-4 py-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition"
+                        onClick={() => {
+                          const kbId = fav.document?.knowledge_base_id
+                          const docId = fav.document_id
+                          if (kbId) navigate(`/kb/${kbId}/docs/${docId}`)
+                        }}
+                        className="flex items-center gap-3 px-4 py-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition cursor-pointer"
                       >
                         <svg className="w-4 h-4 text-yellow-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                         </svg>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{fav.doc_title || '无标题'}</p>
+                          <p className="text-sm font-medium text-gray-800 truncate">{fav.document?.title || fav.doc_title || '无标题'}</p>
                           {fav.kb_name && <p className="text-xs text-gray-400">{fav.kb_name}</p>}
                         </div>
                         <span className="text-xs text-gray-400">
                           {fav.created_at ? new Date(fav.created_at).toLocaleDateString() : ''}
                         </span>
-                      </a>
+                      </div>
                     ))}
                   </div>
                 )}

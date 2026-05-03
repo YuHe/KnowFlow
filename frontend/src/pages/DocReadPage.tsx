@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import type { Editor } from '@tiptap/react';
+import { marked } from 'marked';
+marked.setOptions({ gfm: true, breaks: false });
 import { useDocStore } from '@/store/docStore';
 import { useKbStore } from '@/store/kbStore';
 import { favoritesApi } from '@/api/favorites';
@@ -275,7 +277,8 @@ const DocReadPage: React.FC = () => {
   // ─────────────────────────────────────────────────────────────────
   // READ MODE
   // ─────────────────────────────────────────────────────────────────
-  const content = currentDoc.content_html || currentDoc.content_md || '';
+  const rawContent = currentDoc.content_html || ''
+  const content = rawContent || (currentDoc.content_md ? (marked.parse(currentDoc.content_md) as string) : '')
   const readWordCount = currentDoc.word_count || 0;
 
   return (

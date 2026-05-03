@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { TreeNode as TreeNodeType } from '@/types'
 
 interface TreeNodeProps {
@@ -11,6 +11,9 @@ interface TreeNodeProps {
   onSelect: (id: string) => void
   onToggleExpand: (id: string) => void
   onContextMenu?: (e: React.MouseEvent, nodeId: string) => void
+  onDragStart?: (e: React.DragEvent, nodeId: string) => void
+  onDragOver?: (e: React.DragEvent, nodeId: string) => void
+  onDrop?: (e: React.DragEvent, targetNodeId: string) => void
 }
 
 const TreeNode: React.FC<TreeNodeProps> = ({
@@ -23,19 +26,53 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   onSelect,
   onToggleExpand,
   onContextMenu,
+  onDragStart,
+  onDragOver,
+  onDrop,
 }) => {
   const isSection = node.type === 'section'
+  const isDocument = node.type === 'document'
+  const hasChildren = node.children && node.children.length > 0
+  const isExpandable = isSection || (isDocument && hasChildren)
   const isExpanded = expandedIds.has(node.id)
   const isSelected = selectedNodeId === node.id
   const indent = depth * 14
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (isSection) {
+    if (isExpandable) {
       onToggleExpand(node.id)
-    } else {
+    }
+    if (isDocument) {
       onSelect(node.id)
     }
+  }
+
+  const handleDragStart = (e: React.DragEvent) => {
+    if (readOnly || !onDragStart) return
+    e.stopPropagation()
+    onDragStart(e, node.id)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (readOnly || !onDragOver) return
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+    onDragOver(e, node.id)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (readOnly || !onDrop) return
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    onDrop(e, node.id)
   }
 
   return (
@@ -43,18 +80,25 @@ const TreeNode: React.FC<TreeNodeProps> = ({
       <div
         role="treeitem"
         aria-selected={isSelected}
-        aria-expanded={isSection ? isExpanded : undefined}
+        aria-expanded={isExpandable ? isExpanded : undefined}
         onClick={handleClick}
         onContextMenu={onContextMenu ? (e) => onContextMenu(e, node.id) : undefined}
+        draggable={!readOnly}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition select-none mx-1 ${
           isSelected
             ? 'bg-primary/10 text-primary'
-            : 'text-muted-foreground hover:bg-muted/60'
+            : isDragOver
+              ? 'bg-blue-50 border border-blue-300 text-blue-700'
+              : 'text-muted-foreground hover:bg-muted/60'
         }`}
         style={{ paddingLeft: `${indent + 8}px` }}
       >
-        {/* Expand arrow for sections */}
-        {isSection ? (
+        {/* Expand arrow */}
+        {isExpandable ? (
           <button
             className="flex-shrink-0 w-4 h-4 flex items-center justify-center"
             onClick={(e) => { e.stopPropagation(); onToggleExpand(node.id) }}
@@ -88,8 +132,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         <span className="text-sm truncate flex-1 min-w-0">{node.title || '无标题'}</span>
       </div>
 
-      {/* Children for sections */}
-      {isSection && isExpanded && node.children && node.children.length > 0 && (
+      {/* Children */}
+      {isExpandable && isExpanded && node.children && node.children.length > 0 && (
         <div>
           {node.children.map((child) => (
             <TreeNode
@@ -103,6 +147,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               onSelect={onSelect}
               onToggleExpand={onToggleExpand}
               onContextMenu={onContextMenu}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
             />
           ))}
         </div>

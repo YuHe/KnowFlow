@@ -49,7 +49,7 @@ export const docsApi = {
     await apiClient.delete(`/docs/${docId}`)
   },
 
-  moveDoc: async (docId: string, data: { section_id: string | null }): Promise<Document> => {
+  moveDoc: async (docId: string, data: { section_id: string | null; parent_id?: string | null; sort_order?: number }): Promise<Document> => {
     const response = await apiClient.post<ApiResponse<Document>>(`/docs/${docId}/move`, data)
     return response.data.data
   },

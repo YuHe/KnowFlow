@@ -81,7 +81,17 @@ const TreeContextMenu: React.FC<TreeContextMenuProps> = ({
       return acc;
     }, []);
   };
+  const flatDocs = (nodes: TreeNodeData[], exclude: string): TreeNodeData[] => {
+    return nodes.reduce<TreeNodeData[]>((acc, n) => {
+      if (n.id !== exclude && n.type === 'doc') {
+        acc.push(n);
+        if (n.children) acc.push(...flatDocs(n.children, exclude));
+      }
+      return acc;
+    }, []);
+  };
   const folders = flatFolders(tree, nodeId);
+  const docs = flatDocs(tree, nodeId);
 
   const handleDelete = () => {
     if (window.confirm(`确定要删除"${currentNode?.title || '此项目'}"吗？${currentNode?.type === 'folder' ? '所有子文档也将被删除。' : ''}`)) {
@@ -140,11 +150,18 @@ const TreeContextMenu: React.FC<TreeContextMenuProps> = ({
         ) : (
           <>
             {currentNode?.type === 'doc' && (
-              <MenuItem
-                onClick={() => { navigate(`/kb/${kbId}/doc/${nodeId}/edit`); onClose(); }}
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>}
-                label="编辑"
-              />
+              <>
+                <MenuItem
+                  onClick={() => { navigate(`/kb/${kbId}/doc/${nodeId}/edit`); onClose(); }}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>}
+                  label="编辑"
+                />
+                <MenuItem
+                  onClick={() => { onCreateDoc(nodeId); onClose(); }}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+                  label="新建子文档"
+                />
+              </>
             )}
             {currentNode?.type === 'folder' && (
               <>
@@ -199,8 +216,18 @@ const TreeContextMenu: React.FC<TreeContextMenuProps> = ({
                       <span className="truncate">{folder.title}</span>
                     </button>
                   ))}
-                  {folders.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-gray-400">无可用目录</p>
+                  {currentNode?.type === 'doc' && docs.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => { onMove(nodeId, doc.id); onClose(); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition truncate"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0 text-muted-foreground/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      <span className="truncate">{doc.title}</span>
+                    </button>
+                  ))}
+                  {folders.length === 0 && (currentNode?.type !== 'doc' || docs.length === 0) && (
+                    <p className="px-3 py-2 text-xs text-gray-400">无可用目标</p>
                   )}
                 </div>
               )}

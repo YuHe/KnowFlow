@@ -33,34 +33,42 @@ interface TreeState {
 function buildTreeNodes(
   sections: Section[],
   docs: DocumentListItem[],
-  parentId: string | null = null,
+  parentSectionId: string | null = null,
+  parentDocId: string | null = null,
 ): TreeNode[] {
   const nodes: TreeNode[] = []
 
-  // Add child sections
-  const childSections = sections
-    .filter((s) => s.parent_id === parentId)
-    .sort((a, b) => a.sort_order - b.sort_order)
+  if (parentDocId === null) {
+    // Building section-level children: add child sections
+    const childSections = sections
+      .filter((s) => s.parent_id === parentSectionId)
+      .sort((a, b) => a.sort_order - b.sort_order)
 
-  for (const section of childSections) {
-    const sectionNode: TreeNode = {
-      id: `section-${section.id}`,
-      type: 'section',
-      title: section.title,
-      sort_order: section.sort_order,
-      parent_id: parentId ? `section-${parentId}` : null,
-      knowledge_base_id: section.knowledge_base_id,
-      data: section,
-      children: buildTreeNodes(sections, docs, section.id),
+    for (const section of childSections) {
+      const sectionNode: TreeNode = {
+        id: `section-${section.id}`,
+        type: 'section',
+        title: section.title,
+        sort_order: section.sort_order,
+        parent_id: parentSectionId ? `section-${parentSectionId}` : null,
+        knowledge_base_id: section.knowledge_base_id,
+        data: section,
+        children: buildTreeNodes(sections, docs, section.id, null),
+      }
+      nodes.push(sectionNode)
     }
-    nodes.push(sectionNode)
   }
 
-  // Add docs belonging to this parent section
+  // Add docs belonging to this parent (section or doc)
   const sectionDocs = docs
     .filter((d) => {
-      if (parentId === null) return d.section_id === null
-      return d.section_id === parentId
+      if (parentDocId !== null) {
+        // Sub-documents: parent_id matches
+        return d.parent_id === parentDocId
+      }
+      // Top-level docs in a section (no doc parent)
+      if (parentSectionId === null) return d.section_id === null && d.parent_id === null
+      return d.section_id === parentSectionId && d.parent_id === null
     })
     .sort((a, b) => a.sort_order - b.sort_order)
 
@@ -70,10 +78,14 @@ function buildTreeNodes(
       type: 'document',
       title: doc.title,
       sort_order: doc.sort_order,
-      parent_id: parentId ? `section-${parentId}` : null,
+      parent_id: parentDocId
+        ? `doc-${parentDocId}`
+        : parentSectionId
+          ? `section-${parentSectionId}`
+          : null,
       knowledge_base_id: doc.knowledge_base_id,
       data: doc,
-      children: [],
+      children: buildTreeNodes(sections, docs, null, doc.id),
     }
     nodes.push(docNode)
   }
@@ -95,7 +107,7 @@ export const useTreeStore = create<TreeState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const { sections, docs } = await docsApi.getTree(kbId)
-      const treeNodes = buildTreeNodes(sections, docs)
+      const treeNodes = buildTreeNodes(sections, docs, null, null)
       set({ sections, docs, treeNodes, isLoading: false })
     } catch (error) {
       set({
@@ -131,8 +143,13 @@ export const useTreeStore = create<TreeState>((set, get) => ({
   },
 
   expandAll: () => {
-    const { sections } = get()
-    const ids = new Set(sections.map((s) => `section-${s.id}`))
+    const { sections, docs } = get()
+    const sectionIds = sections.map((s) => `section-${s.id}`)
+    // Also expand docs that have children
+    const docsWithChildren = docs
+      .filter((d) => docs.some((child) => child.parent_id === d.id))
+      .map((d) => `doc-${d.id}`)
+    const ids = new Set([...sectionIds, ...docsWithChildren])
     set({ expandedIds: ids })
   },
 
@@ -153,42 +170,42 @@ export const useTreeStore = create<TreeState>((set, get) => ({
   addSection: (section: Section) => {
     const { sections, docs } = get()
     const newSections = [...sections, section]
-    const treeNodes = buildTreeNodes(newSections, docs)
+    const treeNodes = buildTreeNodes(newSections, docs, null, null)
     set({ sections: newSections, treeNodes })
   },
 
   updateSection: (sectionId: string, updates: Partial<Section>) => {
     const { sections, docs } = get()
     const newSections = sections.map((s) => (s.id === sectionId ? { ...s, ...updates } : s))
-    const treeNodes = buildTreeNodes(newSections, docs)
+    const treeNodes = buildTreeNodes(newSections, docs, null, null)
     set({ sections: newSections, treeNodes })
   },
 
   removeSection: (sectionId: string) => {
     const { sections, docs } = get()
     const newSections = sections.filter((s) => s.id !== sectionId)
-    const treeNodes = buildTreeNodes(newSections, docs)
+    const treeNodes = buildTreeNodes(newSections, docs, null, null)
     set({ sections: newSections, treeNodes })
   },
 
   addDoc: (doc: DocumentListItem) => {
     const { sections, docs } = get()
     const newDocs = [...docs, doc]
-    const treeNodes = buildTreeNodes(sections, newDocs)
+    const treeNodes = buildTreeNodes(sections, newDocs, null, null)
     set({ docs: newDocs, treeNodes })
   },
 
   updateDoc: (docId: string, updates: Partial<DocumentListItem>) => {
     const { sections, docs } = get()
     const newDocs = docs.map((d) => (d.id === docId ? { ...d, ...updates } : d))
-    const treeNodes = buildTreeNodes(sections, newDocs)
+    const treeNodes = buildTreeNodes(sections, newDocs, null, null)
     set({ docs: newDocs, treeNodes })
   },
 
   removeDoc: (docId: string) => {
     const { sections, docs } = get()
     const newDocs = docs.filter((d) => d.id !== docId)
-    const treeNodes = buildTreeNodes(sections, newDocs)
+    const treeNodes = buildTreeNodes(sections, newDocs, null, null)
     set({ docs: newDocs, treeNodes })
   },
 

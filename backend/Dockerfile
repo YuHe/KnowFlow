@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgdk-pixbuf-2.0-0 \
         libffi-dev \
         shared-mime-info \
+        # CJK fonts for PDF export
+        fonts-noto-cjk \
         # Pillow dependencies
         libjpeg-dev \
         libpng-dev \

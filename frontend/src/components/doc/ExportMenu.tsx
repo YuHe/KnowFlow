@@ -75,6 +75,14 @@ export default function ExportMenu({ docId, docTitle }: ExportMenuProps) {
         return
       }
 
+      // If blob is HTML (error page), show generic error
+      if (blob.type.includes('html') || blob.type.includes('text/plain')) {
+        const text = await blob.text()
+        const msg = text.length < 200 ? text : `导出 ${option.ext.toUpperCase()} 失败，请稍后重试`
+        toast({ title: msg, variant: 'destructive' })
+        return
+      }
+
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
