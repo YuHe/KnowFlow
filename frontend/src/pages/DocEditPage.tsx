@@ -22,6 +22,8 @@ const saveStatusColors: Record<string, string> = {
   error: 'text-red-500',
 };
 
+const ZOOM_LEVELS = [50, 75, 90, 100, 110, 125, 150, 175, 200];
+
 const DocEditPage: React.FC = () => {
   const { kbId, docId } = useParams<{ kbId: string; docId: string }>();
   const navigate = useNavigate();
@@ -30,6 +32,8 @@ const DocEditPage: React.FC = () => {
   const [initialContent, setInitialContent] = useState('');
   const [wordCount, setWordCount] = useState(0);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const [sourceMode, setSourceMode] = useState(false);
   const titleRef = useRef(title);
   titleRef.current = title;
 
@@ -99,9 +103,9 @@ const DocEditPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-[#f0f0f0] overflow-hidden">
       {/* Top Bar */}
-      <div className="h-12 border-b flex items-center px-4 gap-3 flex-shrink-0 z-10 bg-background">
+      <div className="h-12 border-b flex items-center px-4 gap-3 flex-shrink-0 z-10 bg-white shadow-sm">
         <button
           onClick={handleExit}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition"
@@ -124,34 +128,42 @@ const DocEditPage: React.FC = () => {
       </div>
 
       {/* Toolbar */}
-      {editorInstance && <EditorToolbar editor={editorInstance} />}
+      {editorInstance && <EditorToolbar editor={editorInstance} zoom={zoom} onZoomChange={setZoom} sourceMode={sourceMode} onSourceModeChange={setSourceMode} />}
 
-      {/* Editor Area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-8 py-8">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => { setTitle(e.target.value); markDirty(); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editorInstance?.commands.focus(); } }}
-            placeholder="无标题文档"
-            className="w-full text-3xl font-bold border-none outline-none mb-4 placeholder:text-muted-foreground/40 bg-transparent"
-          />
-          <hr className="mb-6" />
-          {kbId && (
-            <EditorCore
-              content={initialContent}
-              kbId={kbId}
-              onEditorReady={(ed) => setEditorInstance(ed)}
-              onUpdate={handleEditorUpdate}
-              editable={true}
+      {/* Editor Area — paper on grey canvas */}
+      <div className="flex-1 overflow-y-auto py-8 px-4">
+        <div
+          className="mx-auto bg-white shadow-md rounded-sm"
+          style={{
+            maxWidth: 860,
+            zoom: zoom / 100,
+          }}
+        >
+          <div className="px-16 py-12">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => { setTitle(e.target.value); markDirty(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editorInstance?.commands.focus(); } }}
+              placeholder="无标题文档"
+              className="w-full text-3xl font-bold border-none outline-none mb-6 placeholder:text-muted-foreground/30 bg-transparent text-gray-900"
             />
-          )}
+            {kbId && (
+              <EditorCore
+                content={initialContent}
+                kbId={kbId}
+                onEditorReady={(ed) => setEditorInstance(ed)}
+                onUpdate={handleEditorUpdate}
+                editable={true}
+                sourceMode={sourceMode}
+              />
+            )}
+          </div>
         </div>
       </div>
 
       {/* Status Bar */}
-      <div className="h-8 border-t flex items-center px-4 gap-4 flex-shrink-0 bg-muted/30">
+      <div className="h-8 border-t flex items-center px-4 gap-4 flex-shrink-0 bg-white">
         <span className="text-xs text-muted-foreground">{wordCount} 字</span>
         <span className="text-xs text-muted-foreground">|</span>
         <span className="text-xs text-muted-foreground">Ctrl+S 保存版本</span>

@@ -10,6 +10,7 @@ import SharePanel from '@/components/doc/SharePanel';
 import VersionList from '@/components/doc/VersionList';
 import ExportMenu from '@/components/doc/ExportMenu';
 import { ROLE_LEVELS } from '@/types';
+import { toast } from '@/components/ui/use-toast';
 
 type PanelType = 'comments' | 'share' | 'versions' | null;
 
@@ -35,12 +36,14 @@ const DocReadPage: React.FC = () => {
       if (isFavorited) {
         await favoritesApi.removeFavorite(currentDoc.id);
         setIsFavorited(false);
+        toast({ title: '已取消收藏' });
       } else {
         await favoritesApi.addFavorite(currentDoc.id);
         setIsFavorited(true);
+        toast({ title: '已添加到收藏' });
       }
     } catch {
-      // ignore
+      toast({ title: '操作失败', variant: 'destructive' });
     }
   };
 

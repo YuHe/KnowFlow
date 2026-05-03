@@ -9,7 +9,7 @@ export const favoritesApi = {
 
   addFavorite: async (docId: string): Promise<DocumentFavorite> => {
     const response = await apiClient.post<ApiResponse<DocumentFavorite>>('/favorites', {
-      document_id: docId,
+      doc_id: docId,
     })
     return response.data.data
   },

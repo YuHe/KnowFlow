@@ -28,8 +28,8 @@ export default function VersionList({ docId, onClose }: VersionListProps) {
   const loadVersions = async () => {
     setLoading(true)
     try {
-      const data = await versionsApi.getVersions(docId, { page_size: 50 })
-      setVersions(data.items)
+      const data = await versionsApi.getVersions(docId)
+      setVersions(data)
     } catch {
       toast({ title: '加载版本历史失败', variant: 'destructive' })
     } finally {

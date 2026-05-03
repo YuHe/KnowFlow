@@ -1,8 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react'
 import type { Editor } from '@tiptap/react'
+import { ZoomIn, ZoomOut } from 'lucide-react'
 
 interface EditorToolbarProps {
   editor: Editor
+  zoom?: number
+  onZoomChange?: (zoom: number) => void
+  sourceMode?: boolean
+  onSourceModeChange?: (v: boolean) => void
 }
 
 const ToolbarButton: React.FC<{
@@ -27,34 +32,63 @@ const ToolbarButton: React.FC<{
 
 const Divider = () => <div className="w-px h-5 bg-gray-200 mx-1" />
 
-export default function EditorToolbar({ editor }: EditorToolbarProps) {
+const ZOOM_LEVELS = [50, 75, 90, 100, 110, 125, 150, 175, 200]
+
+// Font sizes: label → px value used with inline style via FontSize extension
+// We store the value as a CSS px string
+const FONT_SIZES = [
+  { label: '正文', value: '' },
+  { label: '10', value: '10px' },
+  { label: '12', value: '12px' },
+  { label: '14', value: '14px' },
+  { label: '16', value: '16px' },
+  { label: '18', value: '18px' },
+  { label: '20', value: '20px' },
+  { label: '24', value: '24px' },
+  { label: '28', value: '28px' },
+  { label: '32', value: '32px' },
+  { label: '36', value: '36px' },
+  { label: '48', value: '48px' },
+  { label: '60', value: '60px' },
+  { label: '72', value: '72px' },
+]
+
+const TEXT_COLORS = [
+  { label: '默认', value: '' },
+  { label: '红色', value: '#ef4444' },
+  { label: '橙色', value: '#f97316' },
+  { label: '黄色', value: '#eab308' },
+  { label: '绿色', value: '#22c55e' },
+  { label: '青色', value: '#06b6d4' },
+  { label: '蓝色', value: '#3b82f6' },
+  { label: '紫色', value: '#a855f7' },
+  { label: '粉色', value: '#ec4899' },
+  { label: '灰色', value: '#6b7280' },
+  { label: '深灰', value: '#374151' },
+  { label: '棕色', value: '#92400e' },
+]
+
+export default function EditorToolbar({ editor, zoom = 100, onZoomChange, sourceMode = false, onSourceModeChange }: EditorToolbarProps) {
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [showColorPicker, setShowColorPicker] = useState(false)
+  const [showFontSize, setShowFontSize] = useState(false)
   const colorPickerRef = useRef<HTMLDivElement>(null)
-
-  const TEXT_COLORS = [
-    { label: '默认', value: '' },
-    { label: '红色', value: '#ef4444' },
-    { label: '橙色', value: '#f97316' },
-    { label: '黄色', value: '#eab308' },
-    { label: '绿色', value: '#22c55e' },
-    { label: '蓝色', value: '#3b82f6' },
-    { label: '紫色', value: '#a855f7' },
-    { label: '粉色', value: '#ec4899' },
-    { label: '灰色', value: '#6b7280' },
-  ]
+  const fontSizeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!showColorPicker) return
+    if (!showColorPicker && !showFontSize) return
     const handle = (e: MouseEvent) => {
-      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+      if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setShowColorPicker(false)
+      }
+      if (showFontSize && fontSizeRef.current && !fontSizeRef.current.contains(e.target as Node)) {
+        setShowFontSize(false)
       }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker])
+  }, [showColorPicker, showFontSize])
 
   if (!editor) return null
 
@@ -79,9 +113,11 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
   }
 
   const currentColor = editor.getAttributes('textStyle').color || ''
+  const currentFontSize = editor.getAttributes('textStyle').fontSize || ''
+  const currentFontLabel = FONT_SIZES.find(f => f.value === currentFontSize)?.label || '正文'
 
   return (
-    <div className="border-b border-gray-200 sticky top-0 bg-white z-10 px-3 py-1.5 flex items-center gap-0.5 flex-wrap">
+    <div className="border-b border-gray-200 sticky top-0 bg-white z-10 px-3 py-1.5 flex items-center gap-0.5 flex-wrap shadow-sm">
       {/* Undo */}
       <ToolbarButton
         onClick={() => editor.chain().focus().undo().run()}
@@ -128,6 +164,45 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
       >
         <span className="text-xs font-bold">H3</span>
       </ToolbarButton>
+
+      {/* Font Size */}
+      <div className="relative" ref={fontSizeRef}>
+        <button
+          type="button"
+          onClick={() => setShowFontSize(v => !v)}
+          title="字号"
+          className="h-7 px-1.5 flex items-center justify-between gap-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-200 min-w-[52px]"
+        >
+          <span>{currentFontLabel}</span>
+          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showFontSize && (
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-24 py-1 max-h-60 overflow-y-auto">
+            {FONT_SIZES.map(f => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => {
+                  if (f.value) {
+                    editor.chain().focus().setMark('textStyle', { fontSize: f.value }).run()
+                  } else {
+                    // Remove fontSize by setting it to null, keep other textStyle attrs
+                    editor.chain().focus().setMark('textStyle', { fontSize: null }).run()
+                  }
+                  setShowFontSize(false)
+                }}
+                className={`w-full text-left px-3 py-1 text-xs hover:bg-gray-50 transition ${
+                  currentFontSize === f.value ? 'text-indigo-600 font-semibold' : 'text-gray-700'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <Divider />
 
@@ -178,7 +253,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
         </svg>
       </ToolbarButton>
 
-      {/* Text Color */}
+      {/* Text Color — uses setColor which preserves other marks */}
       <div className="relative" ref={colorPickerRef}>
         <button
           type="button"
@@ -193,7 +268,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
           />
         </button>
         {showColorPicker && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-44">
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-48">
             <p className="text-xs text-gray-400 mb-1.5 px-1">文字颜色</p>
             <div className="grid grid-cols-4 gap-1">
               {TEXT_COLORS.map((c) => (
@@ -203,6 +278,8 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
                   title={c.label}
                   onClick={() => {
                     if (c.value) {
+                      // Use setColor which only modifies the color attribute
+                      // without clearing bold/italic/underline marks
                       editor.chain().focus().setColor(c.value).run()
                     } else {
                       editor.chain().focus().unsetColor().run()
@@ -305,8 +382,8 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
         active={editor.isActive('blockquote')}
         title="引用"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h10M7 16h10" />
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z" />
         </svg>
       </ToolbarButton>
 
@@ -394,31 +471,31 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
           <Divider />
           <ToolbarButton
             onClick={() => editor.chain().focus().addColumnAfter().run()}
-            title="插入列"
+            title="右侧插入列"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4m6-18h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M9 3v18M15 3v18" />
             </svg>
           </ToolbarButton>
           <ToolbarButton
             onClick={() => editor.chain().focus().addRowAfter().run()}
-            title="插入行"
+            title="下方插入行"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9h18M3 15h18M9 3v18M15 3v18" />
             </svg>
           </ToolbarButton>
           <ToolbarButton
             onClick={() => editor.chain().focus().deleteColumn().run()}
-            title="删除列"
+            title="删除当前列"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </ToolbarButton>
           <ToolbarButton
             onClick={() => editor.chain().focus().deleteRow().run()}
-            title="删除行"
+            title="删除当前行"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -428,9 +505,50 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
             onClick={() => editor.chain().focus().deleteTable().run()}
             title="删除表格"
           >
-            <span className="text-xs text-red-500">删表</span>
+            <span className="text-xs text-red-500 font-medium">删表</span>
           </ToolbarButton>
         </>
+      )}
+
+      {/* Source / Preview toggle handled via EditorCore prop — button shown here */}
+      {onSourceModeChange && (
+        <button
+          type="button"
+          onClick={() => onSourceModeChange(!sourceMode)}
+          title={sourceMode ? '切换到富文本模式' : '查看/编辑源码'}
+          className={`h-7 px-2 flex items-center gap-1 rounded text-xs transition ml-1 ${
+            sourceMode ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          源码
+        </button>
+      )}
+      <div className="flex-1" />
+
+      {/* Zoom controls (only shown if onZoomChange is provided) */}
+      {onZoomChange && (
+        <div className="flex items-center gap-1 ml-2">
+          <button
+            type="button"
+            onClick={() => onZoomChange(Math.max(50, ZOOM_LEVELS[ZOOM_LEVELS.indexOf(zoom) - 1] ?? 50))}
+            className="p-1 rounded hover:bg-gray-100 text-gray-500 transition"
+            title="缩小"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-xs text-gray-500 w-10 text-center">{zoom}%</span>
+          <button
+            type="button"
+            onClick={() => onZoomChange(Math.min(200, ZOOM_LEVELS[ZOOM_LEVELS.indexOf(zoom) + 1] ?? 200))}
+            className="p-1 rounded hover:bg-gray-100 text-gray-500 transition"
+            title="放大"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
     </div>
   )

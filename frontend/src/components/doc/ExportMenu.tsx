@@ -62,6 +62,19 @@ export default function ExportMenu({ docId, docTitle }: ExportMenuProps) {
     setExportingFormat(option.format)
     try {
       const blob = await docsApi.exportDoc(docId, option.format)
+
+      // If blob is actually a JSON error (from server error), decode and show it
+      if (blob.type === 'application/json' || blob.type.includes('json')) {
+        const text = await blob.text()
+        try {
+          const json = JSON.parse(text)
+          toast({ title: json?.error?.message || `导出 ${option.ext.toUpperCase()} 失败`, variant: 'destructive' })
+        } catch {
+          toast({ title: `导出 ${option.ext.toUpperCase()} 失败`, variant: 'destructive' })
+        }
+        return
+      }
+
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -71,8 +84,19 @@ export default function ExportMenu({ docId, docTitle }: ExportMenuProps) {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       toast({ title: `已导出为 ${option.ext.toUpperCase()}` })
-    } catch {
-      toast({ title: `导出 ${option.ext.toUpperCase()} 失败`, variant: 'destructive' })
+    } catch (err: any) {
+      // Try to extract error message from blob error response
+      let msg = `导出 ${option.ext.toUpperCase()} 失败`
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text()
+          const json = JSON.parse(text)
+          msg = json?.detail || json?.error?.message || msg
+        } catch {
+          // keep default msg
+        }
+      }
+      toast({ title: msg, variant: 'destructive' })
     } finally {
       setExportingFormat(null)
     }

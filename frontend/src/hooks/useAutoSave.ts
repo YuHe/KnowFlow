@@ -22,7 +22,7 @@ export function useAutoSave({
 
   const doSave = useCallback(
     async (content: string, createVersion = false) => {
-      if (isSavingRef.current) return;
+      if (isSavingRef.current && !createVersion) return;  // only skip for auto-save, not manual
       isSavingRef.current = true;
       setSaveStatus('saving');
       try {

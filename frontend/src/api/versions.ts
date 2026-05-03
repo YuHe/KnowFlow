@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { ApiResponse, DocumentVersion, DocumentVersionDetail, PaginatedData } from '@/types'
+import type { ApiResponse, DocumentVersion, DocumentVersionDetail } from '@/types'
 
 export interface VersionCompare {
   version_a: DocumentVersionDetail
@@ -7,13 +7,9 @@ export interface VersionCompare {
 }
 
 export const versionsApi = {
-  getVersions: async (
-    docId: string,
-    params?: { page?: number; page_size?: number },
-  ): Promise<PaginatedData<DocumentVersion>> => {
-    const response = await apiClient.get<ApiResponse<PaginatedData<DocumentVersion>>>(
+  getVersions: async (docId: string): Promise<DocumentVersion[]> => {
+    const response = await apiClient.get<ApiResponse<DocumentVersion[]>>(
       `/docs/${docId}/versions`,
-      { params },
     )
     return response.data.data
   },
