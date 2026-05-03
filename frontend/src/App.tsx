@@ -71,11 +71,9 @@ function PublicOnlyRoute() {
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const initAuth = useAuthStore((state) => state.initAuth)
-
   useEffect(() => {
-    initAuth()
-  }, [initAuth])
+    useAuthStore.getState().initAuth()
+  }, [])
 
   return (
     <BrowserRouter>
