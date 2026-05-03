@@ -130,7 +130,7 @@ const CommandList = forwardRef<CommandListRef, CommandListProps>((props, ref) =>
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useImperativeHandle(ref, () => ({
-    onKeyDown({ event }: { event: KeyboardEvent }) {
+    onKeyDown(event: KeyboardEvent) {
       if (event.key === 'ArrowUp') {
         setSelectedIndex((idx) => (idx - 1 + props.items.length) % props.items.length);
         return true;

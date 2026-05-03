@@ -122,9 +122,11 @@ function useToast() {
   stateRef.current = state
 
   React.useEffect(() => {
-    listeners.push(setState)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    listeners.push(setState as any)
     return () => {
-      const index = listeners.indexOf(setState)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const index = listeners.indexOf(setState as any)
       if (index > -1) listeners.splice(index, 1)
     }
   }, [])
