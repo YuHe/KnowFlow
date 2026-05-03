@@ -237,6 +237,16 @@ const DocReadPage: React.FC = () => {
 
   const canEdit = (ROLE_LEVELS[currentKb?.my_role ?? ''] ?? 0) >= ROLE_LEVELS['editor'];
 
+  // Back navigation: go to previous history entry if available,
+  // otherwise fall back to the KB home page.
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate(`/kb/${kbId}`);
+    }
+  };
+
   // ── Loading / not found ────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -350,15 +360,15 @@ const DocReadPage: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Action Bar */}
         <div className="h-12 border-b border-gray-200 flex items-center px-4 gap-2 flex-shrink-0 bg-white">
-          <Link
-            to={`/kb/${kbId}`}
+          <button
+            onClick={handleBack}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition mr-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             返回
-          </Link>
+          </button>
 
           <div className="flex-1" />
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import urllib.parse
 import uuid
 from typing import Optional
 
@@ -332,6 +333,8 @@ async def export_doc(
             raise HTTPException(status_code=403, detail="Access denied")
 
     safe_title = doc.title.replace("/", "_").replace("\\", "_")
+    # RFC 5987 encoded filename for Unicode support (e.g. Chinese titles)
+    encoded_title = urllib.parse.quote(safe_title, safe="")
 
     if format == "md":
         from app.utils.export_md import export_to_markdown
@@ -341,7 +344,7 @@ async def export_doc(
             content=content,
             media_type="text/markdown",
             headers={
-                "Content-Disposition": f'attachment; filename="{safe_title}.md"'
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_title}.md"
             },
         )
     elif format == "docx":
@@ -352,7 +355,7 @@ async def export_doc(
             content=content,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={
-                "Content-Disposition": f'attachment; filename="{safe_title}.docx"'
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_title}.docx"
             },
         )
     elif format == "pdf":
@@ -363,7 +366,7 @@ async def export_doc(
             content=content,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{safe_title}.pdf"'
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_title}.pdf"
             },
         )
     else:

@@ -39,7 +39,7 @@ export const useDocStore = create<DocState>((set, get) => ({
   error: null,
 
   fetchDoc: async (_kbId: string, docId: string) => {
-    set({ isLoading: true, error: null, currentDoc: null })
+    set({ isLoading: true, error: null })
     try {
       const doc = await docsApi.getDoc(docId)
       set({ currentDoc: doc, isLoading: false, isDirty: false, saveStatus: 'saved' })
