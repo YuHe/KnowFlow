@@ -46,6 +46,7 @@ const DocReadPage: React.FC = () => {
   const location = useLocation();
   const { currentDoc, fetchDoc, isLoading } = useDocStore();
   const { currentKb } = useKbStore();
+  const { selectedNodeId, selectNode } = useTreeStore();
   const contentRef = useRef<HTMLDivElement>(null);
 
   // ── Read-mode state ────────────────────────────────────────────────
@@ -65,6 +66,8 @@ const DocReadPage: React.FC = () => {
   titleRef.current = title;
   // Track the HTML at the last manual-save point to detect duplicates
   const lastSavedHtmlRef = useRef('');
+  // Ref to editorInstance for use in effects without stale closure
+  const editorInstanceRef = useRef<Editor | null>(null);
 
   // ── Load document ──────────────────────────────────────────────────
   useEffect(() => {
@@ -79,6 +82,33 @@ const DocReadPage: React.FC = () => {
       setIsFavorited(found);
     }).catch(() => {});
   }, [docId]);
+
+  // Handle tree node selection — navigate even while in edit mode
+  useEffect(() => {
+    if (!selectedNodeId || !kbId) return;
+    if (selectedNodeId.startsWith('doc-')) {
+      const targetDocId = selectedNodeId.replace('doc-', '');
+      if (targetDocId !== docId) {
+        selectNode(null);
+        // If editing, fire-and-forget save before navigating
+        if (isEditing && editorInstanceRef.current) {
+          const html = editorInstanceRef.current.getHTML();
+          docsApi.updateDoc(docId!, {
+            title: titleRef.current,
+            content_html: html,
+            content_md: htmlToMarkdown(html),
+            is_manual_save: false,
+          }).catch(() => {});
+          setIsEditing(false);
+          setEditorInstance(null);
+          editorInstanceRef.current = null;
+        }
+        navigate(`/kb/${kbId}/docs/${targetDocId}`);
+      } else {
+        selectNode(null);
+      }
+    }
+  }, [selectedNodeId, kbId]);
 
   // Enter edit mode automatically when navigated with startEditing flag
   // (e.g. after creating a new document)
@@ -104,6 +134,7 @@ const DocReadPage: React.FC = () => {
   const handleExitEdit = useCallback(async () => {
     setIsEditing(false);
     setEditorInstance(null);
+    editorInstanceRef.current = null;
     setSourceMode(false);
     setZoom(100);
     // Reload doc to reflect any saved changes in read view
@@ -166,17 +197,20 @@ const DocReadPage: React.FC = () => {
   // ── Read-mode helpers ──────────────────────────────────────────────
   const handleToggleFavorite = async () => {
     if (!currentDoc) return;
+    // Optimistic update
+    const prev = isFavorited;
+    setIsFavorited(!prev);
     try {
-      if (isFavorited) {
+      if (prev) {
         await favoritesApi.removeFavorite(currentDoc.id);
-        setIsFavorited(false);
         toast({ title: '已取消收藏' });
       } else {
         await favoritesApi.addFavorite(currentDoc.id);
-        setIsFavorited(true);
         toast({ title: '已添加到收藏' });
       }
     } catch {
+      // Roll back on failure
+      setIsFavorited(prev);
       toast({ title: '操作失败', variant: 'destructive' });
     }
   };
@@ -264,7 +298,7 @@ const DocReadPage: React.FC = () => {
                 <EditorCore
                   content={initialContent}
                   kbId={kbId}
-                  onEditorReady={(ed) => setEditorInstance(ed)}
+                  onEditorReady={(ed) => { setEditorInstance(ed); editorInstanceRef.current = ed; }}
                   onUpdate={handleEditorUpdate}
                   editable={true}
                   sourceMode={sourceMode}

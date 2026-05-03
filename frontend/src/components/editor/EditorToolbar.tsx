@@ -34,24 +34,26 @@ const Divider = () => <div className="w-px h-5 bg-gray-200 mx-1" />
 
 const ZOOM_LEVELS = [50, 75, 90, 100, 110, 125, 150, 175, 200]
 
-// Font sizes: label → px value used with inline style via FontSize extension
-// We store the value as a CSS px string
-const FONT_SIZES = [
-  { label: '正文', value: '' },
-  { label: '10', value: '10px' },
-  { label: '12', value: '12px' },
-  { label: '14', value: '14px' },
-  { label: '16', value: '16px' },
-  { label: '18', value: '18px' },
-  { label: '20', value: '20px' },
-  { label: '24', value: '24px' },
-  { label: '28', value: '28px' },
-  { label: '32', value: '32px' },
-  { label: '36', value: '36px' },
-  { label: '48', value: '48px' },
-  { label: '60', value: '60px' },
-  { label: '72', value: '72px' },
+// Heading levels + body text — combined dropdown replacing individual H1/H2/H3 buttons
+const HEADING_OPTIONS = [
+  { label: '正文', level: 0 },
+  { label: '标题 1', level: 1 },
+  { label: '标题 2', level: 2 },
+  { label: '标题 3', level: 3 },
+  { label: '标题 4', level: 4 },
+  { label: '标题 5', level: 5 },
+  { label: '标题 6', level: 6 },
 ]
+
+const HEADING_FONT_SIZES: Record<number, string> = {
+  0: '14px',
+  1: '28px',
+  2: '22px',
+  3: '18px',
+  4: '16px',
+  5: '14px',
+  6: '13px',
+}
 
 const TEXT_COLORS = [
   { label: '默认', value: '' },
@@ -68,27 +70,44 @@ const TEXT_COLORS = [
   { label: '棕色', value: '#92400e' },
 ]
 
+const HIGHLIGHT_COLORS = [
+  { label: '无', value: '' },
+  { label: '黄色', value: '#fef08a' },
+  { label: '绿色', value: '#bbf7d0' },
+  { label: '蓝色', value: '#bfdbfe' },
+  { label: '粉色', value: '#fbcfe8' },
+  { label: '紫色', value: '#e9d5ff' },
+  { label: '橙色', value: '#fed7aa' },
+  { label: '红色', value: '#fecaca' },
+  { label: '青色', value: '#a5f3fc' },
+]
+
 export default function EditorToolbar({ editor, zoom = 100, onZoomChange, sourceMode = false, onSourceModeChange }: EditorToolbarProps) {
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [showColorPicker, setShowColorPicker] = useState(false)
-  const [showFontSize, setShowFontSize] = useState(false)
+  const [showHighlightPicker, setShowHighlightPicker] = useState(false)
+  const [showHeading, setShowHeading] = useState(false)
   const colorPickerRef = useRef<HTMLDivElement>(null)
-  const fontSizeRef = useRef<HTMLDivElement>(null)
+  const highlightPickerRef = useRef<HTMLDivElement>(null)
+  const headingRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!showColorPicker && !showFontSize) return
+    if (!showColorPicker && !showHighlightPicker && !showHeading) return
     const handle = (e: MouseEvent) => {
       if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setShowColorPicker(false)
       }
-      if (showFontSize && fontSizeRef.current && !fontSizeRef.current.contains(e.target as Node)) {
-        setShowFontSize(false)
+      if (showHighlightPicker && highlightPickerRef.current && !highlightPickerRef.current.contains(e.target as Node)) {
+        setShowHighlightPicker(false)
+      }
+      if (showHeading && headingRef.current && !headingRef.current.contains(e.target as Node)) {
+        setShowHeading(false)
       }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker, showFontSize])
+  }, [showColorPicker, showHighlightPicker, showHeading])
 
   if (!editor) return null
 
@@ -113,8 +132,16 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   }
 
   const currentColor = editor.getAttributes('textStyle').color || ''
-  const currentFontSize = editor.getAttributes('textStyle').fontSize || ''
-  const currentFontLabel = FONT_SIZES.find(f => f.value === currentFontSize)?.label || '正文'
+  const currentHighlight = editor.getAttributes('highlight').color || ''
+
+  // Determine current heading level
+  const currentHeadingLevel = (() => {
+    for (let i = 1; i <= 6; i++) {
+      if (editor.isActive('heading', { level: i })) return i
+    }
+    return 0
+  })()
+  const currentHeadingLabel = HEADING_OPTIONS.find(h => h.level === currentHeadingLevel)?.label || '正文'
 
   return (
     <div className="border-b border-gray-200 sticky top-0 bg-white z-10 px-3 py-1.5 flex items-center gap-0.5 flex-wrap shadow-sm">
@@ -142,62 +169,39 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
 
       <Divider />
 
-      {/* Heading dropdown */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        active={editor.isActive('heading', { level: 1 })}
-        title="标题 1"
-      >
-        <span className="text-xs font-bold">H1</span>
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        active={editor.isActive('heading', { level: 2 })}
-        title="标题 2"
-      >
-        <span className="text-xs font-bold">H2</span>
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        active={editor.isActive('heading', { level: 3 })}
-        title="标题 3"
-      >
-        <span className="text-xs font-bold">H3</span>
-      </ToolbarButton>
-
-      {/* Font Size */}
-      <div className="relative" ref={fontSizeRef}>
+      {/* Heading / Body dropdown (replaces H1/H2/H3 buttons) */}
+      <div className="relative" ref={headingRef}>
         <button
           type="button"
-          onClick={() => setShowFontSize(v => !v)}
-          title="字号"
-          className="h-7 px-1.5 flex items-center justify-between gap-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-200 min-w-[52px]"
+          onClick={() => setShowHeading(v => !v)}
+          title="段落样式"
+          className="h-7 px-1.5 flex items-center justify-between gap-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-200 min-w-[60px]"
         >
-          <span>{currentFontLabel}</span>
+          <span>{currentHeadingLabel}</span>
           <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
-        {showFontSize && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-24 py-1 max-h-60 overflow-y-auto">
-            {FONT_SIZES.map(f => (
+        {showHeading && (
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-32 py-1">
+            {HEADING_OPTIONS.map(h => (
               <button
-                key={f.value}
+                key={h.level}
                 type="button"
                 onClick={() => {
-                  if (f.value) {
-                    editor.chain().focus().setMark('textStyle', { fontSize: f.value }).run()
+                  if (h.level === 0) {
+                    editor.chain().focus().setParagraph().run()
                   } else {
-                    // Remove fontSize by setting it to null, keep other textStyle attrs
-                    editor.chain().focus().setMark('textStyle', { fontSize: null }).run()
+                    editor.chain().focus().toggleHeading({ level: h.level as 1|2|3|4|5|6 }).run()
                   }
-                  setShowFontSize(false)
+                  setShowHeading(false)
                 }}
-                className={`w-full text-left px-3 py-1 text-xs hover:bg-gray-50 transition ${
-                  currentFontSize === f.value ? 'text-indigo-600 font-semibold' : 'text-gray-700'
+                className={`w-full text-left px-3 py-1.5 hover:bg-gray-50 transition flex items-baseline gap-2 ${
+                  currentHeadingLevel === h.level ? 'text-indigo-600 font-semibold' : 'text-gray-700'
                 }`}
+                style={{ fontSize: HEADING_FONT_SIZES[h.level] }}
               >
-                {f.label}
+                {h.label}
               </button>
             ))}
           </div>
@@ -242,18 +246,51 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
         <span className="line-through text-sm">S</span>
       </ToolbarButton>
 
-      {/* Highlight */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHighlight().run()}
-        active={editor.isActive('highlight')}
-        title="高亮"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-        </svg>
-      </ToolbarButton>
+      {/* Highlight — multi-color picker */}
+      <div className="relative" ref={highlightPickerRef}>
+        <button
+          type="button"
+          onClick={() => setShowHighlightPicker(v => !v)}
+          title="文字高亮"
+          className={`w-7 h-7 flex flex-col items-center justify-center rounded text-sm transition hover:bg-gray-100 ${
+            editor.isActive('highlight') ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600'
+          }`}
+        >
+          <span className="font-bold text-sm leading-none" style={{ fontFamily: 'serif' }}>A</span>
+          <span
+            className="w-4 h-1 rounded-sm mt-0.5"
+            style={{ backgroundColor: currentHighlight || '#fef08a' }}
+          />
+        </button>
+        {showHighlightPicker && (
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-44">
+            <p className="text-xs text-gray-400 mb-1.5 px-1">背景高亮</p>
+            <div className="grid grid-cols-4 gap-1">
+              {HIGHLIGHT_COLORS.map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  title={c.label}
+                  onClick={() => {
+                    if (c.value) {
+                      editor.chain().focus().setHighlight({ color: c.value }).run()
+                    } else {
+                      editor.chain().focus().unsetHighlight().run()
+                    }
+                    setShowHighlightPicker(false)
+                  }}
+                  className="w-8 h-8 rounded border border-gray-200 hover:scale-110 transition-transform flex items-center justify-center"
+                  style={{ backgroundColor: c.value || '#ffffff' }}
+                >
+                  {!c.value && <span className="text-xs text-gray-400">✕</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* Text Color — uses setColor which preserves other marks */}
+      {/* Text Color — uses setColor which preserves bold/italic/underline marks */}
       <div className="relative" ref={colorPickerRef}>
         <button
           type="button"
@@ -278,8 +315,6 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
                   title={c.label}
                   onClick={() => {
                     if (c.value) {
-                      // Use setColor which only modifies the color attribute
-                      // without clearing bold/italic/underline marks
                       editor.chain().focus().setColor(c.value).run()
                     } else {
                       editor.chain().focus().unsetColor().run()
@@ -510,7 +545,7 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
         </>
       )}
 
-      {/* Source / Preview toggle handled via EditorCore prop — button shown here */}
+      {/* Source / Preview toggle */}
       {onSourceModeChange && (
         <button
           type="button"
@@ -528,7 +563,7 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
       )}
       <div className="flex-1" />
 
-      {/* Zoom controls (only shown if onZoomChange is provided) */}
+      {/* Zoom controls */}
       {onZoomChange && (
         <div className="flex items-center gap-1 ml-2">
           <button
