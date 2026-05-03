@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # Storage
     STORAGE_TYPE: str = "local"
-    STORAGE_LOCAL_PATH: str = "/data/uploads"
+    STORAGE_LOCAL_PATH: str = "/app/uploads"
     MAX_UPLOAD_SIZE_MB: int = 100
     IMAGE_MAX_SIZE_MB: int = 10
 

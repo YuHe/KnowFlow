@@ -52,7 +52,7 @@ services:
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
       SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
-      UPLOAD_DIR: /app/uploads
+      STORAGE_LOCAL_PATH: /app/uploads
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-104857600}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8192,https://knowflow.ihope.cc}
       ENVIRONMENT: ${ENVIRONMENT:-production}
