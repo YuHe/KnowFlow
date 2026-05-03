@@ -61,7 +61,8 @@ class MemberOut(BaseModel):
 
 
 class MemberAdd(BaseModel):
-    user_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
+    email: Optional[str] = None
     role: str = Field(..., pattern="^(admin|editor|viewer)$")
 
 

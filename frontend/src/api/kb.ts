@@ -54,7 +54,7 @@ export const kbApi = {
     return response.data.data
   },
 
-  addMember: async (kbId: string, data: { user_id: string; role: KbRole }): Promise<KnowledgeBaseMember> => {
+  addMember: async (kbId: string, data: { user_id?: string; email?: string; role: KbRole }): Promise<KnowledgeBaseMember> => {
     const response = await apiClient.post<ApiResponse<KnowledgeBaseMember>>(`/kb/${kbId}/members`, data)
     return response.data.data
   },

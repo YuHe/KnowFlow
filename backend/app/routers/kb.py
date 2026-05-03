@@ -328,19 +328,25 @@ async def add_member(
     current_user: User = Depends(get_current_active_user),
     role: str = Depends(require_kb_role("admin")),
 ):
-    # Check user exists
-    user_result = await db.execute(select(User).where(User.id == payload.user_id))
+    # Resolve target user by user_id or email
+    if payload.user_id:
+        user_result = await db.execute(select(User).where(User.id == payload.user_id))
+    elif payload.email:
+        user_result = await db.execute(select(User).where(User.email == payload.email))
+    else:
+        return err("INVALID_INPUT", "Provide either user_id or email.", 400)
+
     target_user = user_result.scalar_one_or_none()
     if not target_user:
-        return err("USER_NOT_FOUND", "Target user not found.", 404)
+        return err("USER_NOT_FOUND", "用户不存在，请检查邮箱是否正确。", 404)
 
-    existing = await get_kb_member_role(db, kb_id, payload.user_id)
+    existing = await get_kb_member_role(db, kb_id, target_user.id)
     if existing:
-        return err("ALREADY_MEMBER", "User is already a member.", 409)
+        return err("ALREADY_MEMBER", "该用户已经是成员。", 409)
 
     member = KnowledgeBaseMember(
         knowledge_base_id=kb_id,
-        user_id=payload.user_id,
+        user_id=target_user.id,
         role=payload.role,
         invited_by=current_user.id,
     )
