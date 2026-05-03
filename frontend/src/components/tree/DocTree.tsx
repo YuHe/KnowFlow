@@ -91,7 +91,7 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
     e.dataTransfer.dropEffect = 'move'
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent, targetNodeId: string) => {
+  const handleDrop = useCallback(async (e: React.DragEvent, targetNodeId: string, position: 'before' | 'after' | 'inside') => {
     e.preventDefault()
     const sourceNodeId = dragNodeIdRef.current || e.dataTransfer.getData('text/plain')
     dragNodeIdRef.current = null
@@ -123,27 +123,87 @@ const DocTree: React.FC<DocTreeProps> = ({ kbId, readOnly = false }) => {
 
     if (isDescendant(sourceNodeId, targetNodeId, treeNodes)) return
 
-    try {
-      if (sourceNodeId.startsWith('doc-')) {
-        const docId = sourceNodeId.slice(4)
-        if (targetNodeId.startsWith('doc-')) {
-          // doc → doc: make it a child of target doc
-          const targetDocId = targetNodeId.slice(4)
-          await docsApi.moveDoc(docId, { section_id: null, parent_id: targetDocId })
-          expandNode(targetNodeId)
-        } else if (targetNodeId.startsWith('section-')) {
-          // doc → section: move to section
-          const targetSectionId = targetNodeId.slice(8)
-          await docsApi.moveDoc(docId, { section_id: targetSectionId, parent_id: null })
-          expandNode(targetNodeId)
+    // Helper: find a node and its siblings in the tree
+    const findNodeWithSiblings = (id: string, nodes: TreeNodeType[]): { node: TreeNodeType; siblings: TreeNodeType[] } | null => {
+      for (const n of nodes) {
+        if (n.id === id) return { node: n, siblings: nodes }
+        if (n.children) {
+          const found = findNodeWithSiblings(id, n.children)
+          if (found) return found
         }
-      } else if (sourceNodeId.startsWith('section-')) {
-        const sectionId = sourceNodeId.slice(8)
-        if (targetNodeId.startsWith('section-')) {
-          // section → section: make it a child section
-          const targetSectionId = targetNodeId.slice(8)
-          await docsApi.updateSection(kbId, sectionId, { parent_id: targetSectionId })
-          expandNode(targetNodeId)
+      }
+      return null
+    }
+
+    try {
+      if (position === 'inside') {
+        // Reparent: make source a child of target
+        if (sourceNodeId.startsWith('doc-')) {
+          const docId = sourceNodeId.slice(4)
+          if (targetNodeId.startsWith('doc-')) {
+            const targetDocId = targetNodeId.slice(4)
+            await docsApi.moveDoc(docId, { section_id: null, parent_id: targetDocId })
+            expandNode(targetNodeId)
+          } else if (targetNodeId.startsWith('section-')) {
+            const targetSectionId = targetNodeId.slice(8)
+            await docsApi.moveDoc(docId, { section_id: targetSectionId, parent_id: null })
+            expandNode(targetNodeId)
+          }
+        } else if (sourceNodeId.startsWith('section-')) {
+          const sectionId = sourceNodeId.slice(8)
+          if (targetNodeId.startsWith('section-')) {
+            const targetSectionId = targetNodeId.slice(8)
+            await docsApi.updateSection(kbId, sectionId, { parent_id: targetSectionId })
+            expandNode(targetNodeId)
+          }
+        }
+      } else {
+        // Reorder: insert before or after target within same parent
+        const targetInfo = findNodeWithSiblings(targetNodeId, treeNodes)
+        if (!targetInfo) return
+        const { node: targetNode, siblings } = targetInfo
+
+        if (sourceNodeId.startsWith('doc-') && targetNodeId.startsWith('doc-')) {
+          const docId = sourceNodeId.slice(4)
+          // Compute a sort_order between the surrounding siblings (excluding source itself)
+          const siblingsWithoutSource = siblings.filter((n) => n.id !== sourceNodeId)
+          const insertInFiltered = siblingsWithoutSource.findIndex((n) => n.id === targetNodeId)
+          const finalIndex = position === 'before' ? insertInFiltered : insertInFiltered + 1
+          const prev = siblingsWithoutSource[finalIndex - 1]
+          const next = siblingsWithoutSource[finalIndex]
+          const newOrder = prev && next
+            ? Math.round(((prev.sort_order ?? 0) + (next.sort_order ?? 0)) / 2)
+            : prev
+              ? (prev.sort_order ?? 0) + 1000
+              : next
+                ? (next.sort_order ?? 0) - 1000
+                : 0
+          // Move to same parent context with new sort_order
+          const targetDocData = targetNode.data as import('@/types').DocumentListItem
+          await docsApi.moveDoc(docId, {
+            section_id: targetDocData.section_id,
+            parent_id: targetDocData.parent_id,
+            sort_order: newOrder,
+          })
+        } else if (sourceNodeId.startsWith('section-') && targetNodeId.startsWith('section-')) {
+          const sectionId = sourceNodeId.slice(8)
+          const siblingsWithoutSource = siblings.filter((n) => n.id !== sourceNodeId)
+          const insertInFiltered = siblingsWithoutSource.findIndex((n) => n.id === targetNodeId)
+          const finalIndex = position === 'before' ? insertInFiltered : insertInFiltered + 1
+          const prev = siblingsWithoutSource[finalIndex - 1]
+          const next = siblingsWithoutSource[finalIndex]
+          const newOrder = prev && next
+            ? Math.round(((prev.sort_order ?? 0) + (next.sort_order ?? 0)) / 2)
+            : prev
+              ? (prev.sort_order ?? 0) + 1000
+              : next
+                ? (next.sort_order ?? 0) - 1000
+                : 0
+          const targetSectionData = targetNode.data as import('@/types').Section
+          await docsApi.updateSection(kbId, sectionId, {
+            parent_id: targetSectionData.parent_id ?? null,
+            sort_order: newOrder,
+          })
         }
       }
       await fetchTree(kbId)

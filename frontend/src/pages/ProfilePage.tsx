@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { favoritesApi } from '../api/favorites';
 import { templatesApi } from '../api/templates';
@@ -10,8 +10,9 @@ type TabType = 'profile' | 'password' | 'favorites' | 'templates';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, setUser } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
+  const [activeTab, setActiveTab] = useState<TabType>((location.state?.defaultTab as TabType) || 'profile');
   const [profileForm, setProfileForm] = useState({
     display_name: user?.display_name || '',
     email: user?.email || '',

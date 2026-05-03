@@ -13,7 +13,7 @@ interface TreeNodeProps {
   onContextMenu?: (e: React.MouseEvent, nodeId: string) => void
   onDragStart?: (e: React.DragEvent, nodeId: string) => void
   onDragOver?: (e: React.DragEvent, nodeId: string) => void
-  onDrop?: (e: React.DragEvent, targetNodeId: string) => void
+  onDrop?: (e: React.DragEvent, targetNodeId: string, position: 'before' | 'after' | 'inside') => void
 }
 
 const TreeNode: React.FC<TreeNodeProps> = ({
@@ -37,7 +37,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const isExpanded = expandedIds.has(node.id)
   const isSelected = selectedNodeId === node.id
   const indent = depth * 14
-  const [isDragOver, setIsDragOver] = useState(false)
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null)
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -59,24 +59,42 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     if (readOnly || !onDragOver) return
     e.preventDefault()
     e.stopPropagation()
-    setIsDragOver(true)
+    // Determine drop position based on cursor vertical position
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const relativeY = e.clientY - rect.top
+    const height = rect.height
+    let pos: 'before' | 'after' | 'inside'
+    if (relativeY < height * 0.25) {
+      pos = 'before'
+    } else if (relativeY > height * 0.75) {
+      pos = 'after'
+    } else {
+      pos = 'inside'
+    }
+    setDropPosition(pos)
     onDragOver(e, node.id)
   }
 
   const handleDragLeave = () => {
-    setIsDragOver(false)
+    setDropPosition(null)
   }
 
   const handleDrop = (e: React.DragEvent) => {
     if (readOnly || !onDrop) return
     e.preventDefault()
     e.stopPropagation()
-    setIsDragOver(false)
-    onDrop(e, node.id)
+    const pos = dropPosition || 'inside'
+    setDropPosition(null)
+    onDrop(e, node.id, pos)
   }
 
   return (
     <div>
+      {/* Drop indicator: before */}
+      {dropPosition === 'before' && (
+        <div className="h-0.5 mx-2 bg-primary rounded" style={{ marginLeft: indent + 8 }} />
+      )}
+
       <div
         role="treeitem"
         aria-selected={isSelected}
@@ -91,7 +109,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition select-none mx-1 ${
           isSelected
             ? 'bg-primary/10 text-primary'
-            : isDragOver
+            : dropPosition === 'inside'
               ? 'bg-blue-50 border border-blue-300 text-blue-700'
               : 'text-muted-foreground hover:bg-muted/60'
         }`}
@@ -131,6 +149,11 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         {/* Title */}
         <span className="text-sm truncate flex-1 min-w-0">{node.title || '无标题'}</span>
       </div>
+
+      {/* Drop indicator: after */}
+      {dropPosition === 'after' && (
+        <div className="h-0.5 mx-2 bg-primary rounded" style={{ marginLeft: indent + 8 }} />
+      )}
 
       {/* Children */}
       {isExpandable && isExpanded && node.children && node.children.length > 0 && (

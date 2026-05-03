@@ -19,6 +19,7 @@ import VersionList from '@/components/doc/VersionList';
 import ExportMenu from '@/components/doc/ExportMenu';
 import { ROLE_LEVELS } from '@/types';
 import { toast } from '@/components/ui/use-toast';
+import { useTreeStore } from '@/store/treeStore';
 
 type PanelType = 'comments' | 'share' | 'versions' | null;
 
@@ -70,16 +71,25 @@ const DocReadPage: React.FC = () => {
     if (kbId && docId) fetchDoc(kbId, docId);
   }, [kbId, docId]);
 
+  // Check favorite status when doc loads
+  useEffect(() => {
+    if (!docId) return;
+    favoritesApi.getFavorites({ page_size: 200 }).then((data) => {
+      const found = (data.items || []).some((f) => f.document_id === docId);
+      setIsFavorited(found);
+    }).catch(() => {});
+  }, [docId]);
+
   // Enter edit mode automatically when navigated with startEditing flag
   // (e.g. after creating a new document)
   useEffect(() => {
-    if (!isEditing && currentDoc && location.state?.startEditing) {
+    if (!isEditing && currentDoc && currentDoc.id === docId && location.state?.startEditing) {
       handleEnterEdit();
       // Clear the state so refreshes don't re-enter edit mode
       navigate(location.pathname, { replace: true, state: {} });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDoc]);
+  }, [currentDoc, docId]);
 
   // ── Edit-mode helpers ──────────────────────────────────────────────
   const handleEnterEdit = useCallback(() => {
@@ -112,6 +122,7 @@ const DocReadPage: React.FC = () => {
         word_count: md.length,
         is_manual_save: false,
       });
+      useTreeStore.getState().updateDoc(docId, { title: titleRef.current });
     },
     [docId, kbId],
   );
@@ -133,6 +144,7 @@ const DocReadPage: React.FC = () => {
         is_manual_save: true,
       });
       lastSavedHtmlRef.current = html;
+      useTreeStore.getState().updateDoc(docId, { title: titleRef.current });
     },
     [docId, kbId],
   );

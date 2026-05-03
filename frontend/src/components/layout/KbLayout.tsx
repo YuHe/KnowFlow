@@ -1,21 +1,58 @@
 import { Outlet, Link, useLocation, useParams } from 'react-router-dom'
-import { useEffect } from 'react'
-import { ChevronLeft, ChevronRight, MessageSquare, Clock, AlignLeft, Share2 } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useKbStore } from '@/store/kbStore'
 import { useTreeStore } from '@/store/treeStore'
 import { cn } from '@/utils'
 import DocTree from '@/components/tree/DocTree'
 
+const MIN_SIDEBAR_WIDTH = 180
+const MAX_SIDEBAR_WIDTH = 480
+const DEFAULT_SIDEBAR_WIDTH = 260
+
 export function KbLayout() {
   const { kbId } = useParams<{ kbId: string }>()
   const location = useLocation()
-  const { sidebarOpen, outlineOpen, commentPanelOpen, versionPanelOpen, toggleSidebar, openRightPanel, closeAllPanels } =
+  const { sidebarOpen, toggleSidebar } =
     useUiStore()
   const { currentKb, fetchKbById } = useKbStore()
   const { fetchTree } = useTreeStore()
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const isResizingRef = useRef(false)
+  const startXRef = useRef(0)
+  const startWidthRef = useRef(DEFAULT_SIDEBAR_WIDTH)
 
-  const isRightPanelOpen = outlineOpen || commentPanelOpen || versionPanelOpen
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizingRef.current = true
+    startXRef.current = e.clientX
+    startWidthRef.current = sidebarWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return
+      const delta = e.clientX - startXRef.current
+      const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, startWidthRef.current + delta))
+      setSidebarWidth(newWidth)
+    }
+    const handleMouseUp = () => {
+      if (isResizingRef.current) {
+        isResizingRef.current = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
 
   useEffect(() => {
     if (kbId) {
@@ -29,9 +66,10 @@ export function KbLayout() {
       {/* Left Sidebar */}
       <aside
         className={cn(
-          'relative flex flex-col border-r bg-background transition-all duration-200 shrink-0',
-          sidebarOpen ? 'w-[260px]' : 'w-0 overflow-hidden border-r-0',
+          'relative flex flex-col border-r bg-background transition-none shrink-0',
+          sidebarOpen ? '' : 'w-0 overflow-hidden border-r-0',
         )}
+        style={sidebarOpen ? { width: sidebarWidth } : undefined}
       >
         {/* KB header */}
         <div className="px-4 py-3 border-b bg-background flex-shrink-0">
@@ -63,13 +101,21 @@ export function KbLayout() {
             成员管理
           </Link>
         </div>
+
+        {/* Resize handle */}
+        {sidebarOpen && (
+          <div
+            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
+            onMouseDown={handleResizeMouseDown}
+          />
+        )}
       </aside>
 
       {/* Sidebar toggle button */}
       <button
         onClick={toggleSidebar}
         className="absolute left-0 top-1/2 z-10 flex h-8 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 bg-background shadow-sm hover:bg-accent transition-colors"
-        style={{ left: sidebarOpen ? '260px' : '0' }}
+        style={{ left: sidebarOpen ? sidebarWidth : 0 }}
         aria-label={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}
       >
         {sidebarOpen ? (
@@ -80,91 +126,9 @@ export function KbLayout() {
       </button>
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
-        <main className="flex-1 overflow-y-auto">
-          <Outlet />
-        </main>
-
-        {/* Right Panel Tabs */}
-        <div className="flex shrink-0 border-l">
-          {/* Tab buttons */}
-          <div className="flex w-10 flex-col items-center border-r py-4 gap-1">
-            <button
-              onClick={() => outlineOpen ? closeAllPanels() : openRightPanel('outline')}
-              className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                outlineOpen
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-              )}
-              title="文档大纲"
-              aria-label="文档大纲"
-            >
-              <AlignLeft className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => commentPanelOpen ? closeAllPanels() : openRightPanel('comments')}
-              className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                commentPanelOpen
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-              )}
-              title="评论"
-              aria-label="评论"
-            >
-              <MessageSquare className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => versionPanelOpen ? closeAllPanels() : openRightPanel('versions')}
-              className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                versionPanelOpen
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-              )}
-              title="版本历史"
-              aria-label="版本历史"
-            >
-              <Clock className="h-4 w-4" />
-            </button>
-            <button
-              className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              title="分享"
-              aria-label="分享"
-            >
-              <Share2 className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Right Panel Content */}
-          <div
-            className={cn(
-              'transition-all duration-200 overflow-hidden',
-              isRightPanelOpen ? 'w-[220px]' : 'w-0',
-            )}
-          >
-            <div className="h-full w-[220px] overflow-y-auto p-3">
-              {outlineOpen && (
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold">文档大纲</h3>
-                  {/* OutlinePanel will be rendered via Outlet */}
-                </div>
-              )}
-              {commentPanelOpen && (
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold">评论</h3>
-                </div>
-              )}
-              {versionPanelOpen && (
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold">版本历史</h3>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <main className="flex-1 overflow-y-auto">
+        <Outlet />
+      </main>
     </div>
   )
 }
