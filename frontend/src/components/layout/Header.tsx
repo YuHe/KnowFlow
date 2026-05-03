@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Search, Bell, ChevronDown, LogOut, User, Settings } from 'lucide-react'
 import { useState } from 'react'
 import {
