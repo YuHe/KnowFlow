@@ -64,6 +64,7 @@ def _kb_to_dict(kb: KnowledgeBase) -> dict:
         "slug": kb.slug,
         "description": kb.description,
         "icon": kb.icon,
+        "icon_url": kb.icon_url,
         "visibility": kb.visibility,
         "owner_id": str(kb.owner_id),
         "created_at": kb.created_at.isoformat(),

@@ -167,12 +167,13 @@ async def access_share(
     share_result = await db.execute(
         select(DocumentShare).where(
             DocumentShare.share_code == share_code,
-            DocumentShare.is_active == True,
         )
     )
     share = share_result.scalar_one_or_none()
     if not share:
-        raise HTTPException(status_code=404, detail="Share link not found or inactive")
+        raise HTTPException(status_code=404, detail="Share link not found")
+    if not share.is_active:
+        return err("SHARE_DISABLED", "This share link has been disabled.", 403)
 
     # Check expiry
     if share.expires_at:

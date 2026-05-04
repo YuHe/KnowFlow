@@ -33,30 +33,33 @@ const SharedDocPage: React.FC = () => {
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [errorType, setErrorType] = useState<'disabled' | 'expired' | 'forbidden' | 'notfound' | 'unknown' | null>(null)
   const [verifying, setVerifying] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null!)
 
   const loadDoc = async (pwd?: string) => {
     if (!shareCode) return
     setLoading(true)
-    setError('')
+    setErrorType(null)
     try {
       const data = await fetchSharedDoc(shareCode, pwd)
       setDoc(data)
       setNeedPassword(false)
     } catch (err: any) {
       const status = err?.response?.status
+      const code = err?.response?.data?.error?.code
       if (status === 401) {
         setNeedPassword(true)
+      } else if (status === 403 && code === 'SHARE_DISABLED') {
+        setErrorType('disabled')
       } else if (status === 410) {
-        setError('分享链接已过期')
+        setErrorType('expired')
       } else if (status === 403) {
-        setError('无权访问此分享链接')
+        setErrorType('forbidden')
       } else if (status === 404) {
-        setError('分享链接不存在')
+        setErrorType('notfound')
       } else {
-        setError('加载失败，请稍后重试')
+        setErrorType('unknown')
       }
     } finally {
       setLoading(false)
@@ -119,23 +122,100 @@ const SharedDocPage: React.FC = () => {
     )
   }
 
-  if (error) {
+  if (errorType) {
+    const errorConfig = {
+      disabled: {
+        icon: (
+          <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        ),
+        bg: 'bg-gray-50',
+        iconBg: 'bg-gray-100',
+        title: '分享已停用',
+        desc: '此分享链接已被创建者停用，暂时无法访问。',
+        hint: '如需访问，请联系文档所有者重新开启分享。',
+      },
+      expired: {
+        icon: (
+          <svg className="w-10 h-10 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ),
+        bg: 'bg-amber-50',
+        iconBg: 'bg-amber-100',
+        title: '分享链接已过期',
+        desc: '此分享链接的有效期已结束，无法继续访问。',
+        hint: '如需获取文档内容，请联系文档所有者重新生成分享链接。',
+      },
+      forbidden: {
+        icon: (
+          <svg className="w-10 h-10 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        ),
+        bg: 'bg-orange-50',
+        iconBg: 'bg-orange-100',
+        title: '无权访问',
+        desc: '此文档仅限知识库成员访问，请先登录并确认您已被加入该知识库。',
+        hint: null,
+      },
+      notfound: {
+        icon: (
+          <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ),
+        bg: 'bg-red-50',
+        iconBg: 'bg-red-100',
+        title: '链接不存在',
+        desc: '找不到此分享链接，可能已被删除或链接有误。',
+        hint: null,
+      },
+      unknown: {
+        icon: (
+          <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ),
+        bg: 'bg-gray-50',
+        iconBg: 'bg-gray-100',
+        title: '加载失败',
+        desc: '网络或服务异常，请稍后重试。',
+        hint: null,
+      },
+    }[errorType]
+
     return (
       <div className="flex h-screen flex-col bg-white">
         <LogoBar />
-        <div className="flex flex-1 flex-col items-center justify-center gap-4">
-          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+        <div className={`flex flex-1 flex-col items-center justify-center px-4`}>
+          <div className="w-full max-w-sm text-center">
+            <div className={`w-20 h-20 ${errorConfig.iconBg} rounded-2xl flex items-center justify-center mx-auto mb-5`}>
+              {errorConfig.icon}
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{errorConfig.title}</h2>
+            <p className="text-sm text-gray-500 leading-relaxed mb-1">{errorConfig.desc}</p>
+            {errorConfig.hint && (
+              <p className="text-xs text-gray-400 leading-relaxed mb-5">{errorConfig.hint}</p>
+            )}
+            <div className="mt-6 flex flex-col gap-2">
+              {errorType === 'forbidden' && (
+                <button
+                  onClick={() => navigate('/login')}
+                  className="w-full py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  登录账号
+                </button>
+              )}
+              <button
+                onClick={() => navigate('/')}
+                className="w-full py-2.5 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                返回首页
+              </button>
+            </div>
           </div>
-          <p className="text-gray-600 font-medium">{error}</p>
-          <button
-            onClick={() => navigate('/login')}
-            className="text-sm text-primary hover:underline"
-          >
-            前往登录
-          </button>
         </div>
       </div>
     )
