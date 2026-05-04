@@ -141,7 +141,8 @@ const DocReadPage: React.FC = () => {
   const handleEnterEdit = useCallback(() => {
     if (!currentDoc) return;
     setTitle(currentDoc.title || '');
-    const content = currentDoc.content_html || currentDoc.content_md || '';
+    const content = currentDoc.content_html
+      || (currentDoc.content_md ? (marked.parse(currentDoc.content_md) as string) : '');
     setInitialContent(content);
     lastSavedHtmlRef.current = currentDoc.content_html || '';
     setIsEditing(true);
