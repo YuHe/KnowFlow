@@ -101,8 +101,9 @@ export default function SharePanel({ docId, onClose }: SharePanelProps) {
   }
 
   const handleCopy = (share: DocumentShare) => {
+    const url = `${window.location.origin}/s/${share.share_code}`
     navigator.clipboard
-      .writeText(share.share_url)
+      .writeText(url)
       .then(() => {
         setCopiedId(share.id)
         setTimeout(() => setCopiedId(null), 2000)
@@ -157,7 +158,7 @@ export default function SharePanel({ docId, onClose }: SharePanelProps) {
                 <div className="flex items-center gap-1">
                   <input
                     readOnly
-                    value={share.share_url}
+                    value={`${window.location.origin}/s/${share.share_code}`}
                     className="flex-1 min-w-0 text-xs bg-gray-50 border rounded px-2 py-1 text-gray-600 truncate"
                   />
                   <button

@@ -293,7 +293,6 @@ export interface DocumentShare {
   id: string
   document_id: string
   share_code: string
-  share_url: string
   access_level: 'anyone' | 'members_only'
   expires_at: string | null
   has_password: boolean

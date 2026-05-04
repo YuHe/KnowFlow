@@ -40,6 +40,7 @@ def _share_to_dict(s: DocumentShare) -> dict:
         "share_code": s.share_code,
         "access_level": s.access_level,
         "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+        "has_password": bool(s.password_hash),
         "is_active": s.is_active,
         "created_by": str(s.created_by) if s.created_by else None,
         "created_at": s.created_at.isoformat(),
