@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { marked } from 'marked'
+marked.setOptions({ gfm: true, breaks: false })
 import apiClient from '../api/client'
 import logoUrl from '@/assets/logo.png'
 import DocViewer from '@/components/doc/DocViewer'
@@ -218,7 +220,10 @@ const SharedDocPage: React.FC = () => {
           )}
         </div>
 
-        <DocViewer content={doc.content_html || ''} containerRef={contentRef} />
+        <DocViewer
+          content={doc.content_html || (doc.content_md ? (marked.parse(doc.content_md) as string) : '')}
+          containerRef={contentRef}
+        />
       </div>
 
       {/* Footer */}
