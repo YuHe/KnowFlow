@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useParams } from 'react-router-dom'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useKbStore } from '@/store/kbStore'
 import { useTreeStore } from '@/store/treeStore'
@@ -92,8 +92,20 @@ export function KbLayout() {
         <div className="flex-1 overflow-y-auto">
           {kbId && <DocTree kbId={kbId} />}
         </div>
-        {/* KB settings link at bottom */}
-        <div className="px-3 py-2 border-t flex-shrink-0">
+        {/* KB settings / trash links at bottom */}
+        <div className="px-3 py-2 border-t flex-shrink-0 space-y-0.5">
+          <Link
+            to={`/kb/${kbId}/trash`}
+            className={cn(
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition',
+              location.pathname.endsWith('/trash')
+                ? 'bg-red-50 text-red-600'
+                : 'text-muted-foreground hover:bg-muted/60',
+            )}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            回收站
+          </Link>
           <Link
             to={`/kb/${kbId}/settings`}
             className={cn(

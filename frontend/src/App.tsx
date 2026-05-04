@@ -20,6 +20,7 @@ function EditRedirect() {
 
 // ── Lazily loaded pages ───────────────────────────────────────────────────────
 const KbSettingsPage = lazy(() => import('@/pages/KbSettingsPage'))
+const TrashPage = lazy(() => import('@/pages/TrashPage'))
 const SearchResultPage = lazy(() => import('@/pages/SearchResultPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
 const PublicKbPage = lazy(() => import('@/pages/PublicKbPage'))
@@ -103,6 +104,7 @@ export default function App() {
                 <Route path="docs/:docId" element={<DocReadPage />} />
                 <Route path="docs/:docId/edit" element={<EditRedirect />} />
                 <Route path="settings" element={<KbSettingsPage />} />
+                <Route path="trash" element={<TrashPage />} />
               </Route>
             </Route>
           </Route>

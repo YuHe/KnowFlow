@@ -67,6 +67,21 @@ export const docsApi = {
     return response.data
   },
 
+  // ── Trash ──────────────────────────────────────────────────────────────
+  getTrash: async (kbId: string): Promise<DocumentListItem[]> => {
+    const response = await apiClient.get<ApiResponse<DocumentListItem[]>>(`/kb/${kbId}/trash`)
+    return response.data.data
+  },
+
+  restoreDoc: async (docId: string): Promise<Document> => {
+    const response = await apiClient.post<ApiResponse<Document>>(`/docs/${docId}/restore`)
+    return response.data.data
+  },
+
+  permanentDeleteDoc: async (docId: string): Promise<void> => {
+    await apiClient.delete(`/docs/${docId}/permanent`)
+  },
+
   // ── Sections ───────────────────────────────────────────────────────────
   getSections: async (kbId: string): Promise<Section[]> => {
     const response = await apiClient.get<ApiResponse<Section[]>>(`/kb/${kbId}/sections`)

@@ -186,6 +186,8 @@ export interface DocumentListItem {
   updated_at: string
   created_by_user?: User
   updated_by_user?: User
+  deleted_at?: string | null
+  deleted_by?: string | null
 }
 
 export interface DocCreate {
@@ -195,6 +197,7 @@ export interface DocCreate {
   section_id?: string | null
   parent_id?: string | null
   template_id?: string | null
+  sort_order?: number
 }
 
 export interface DocUpdate {

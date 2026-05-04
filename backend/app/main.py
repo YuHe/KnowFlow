@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import subprocess
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request, status
@@ -45,10 +47,48 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("Super admin seeding failed: %s", exc)
 
+    # Clean up expired trash (docs deleted > 30 days ago)
+    try:
+        await _cleanup_expired_trash()
+    except Exception as exc:
+        logger.error("Initial trash cleanup failed: %s", exc)
+
+    # Start periodic trash cleanup (daily)
+    cleanup_task = asyncio.create_task(_trash_cleanup_loop())
+
     yield
 
-    # Shutdown
+    cleanup_task.cancel()
     await close_redis()
+
+
+async def _cleanup_expired_trash() -> None:
+    """Permanently delete documents that have been in trash for more than 30 days."""
+    from sqlalchemy import delete
+
+    from app.database import AsyncSessionLocal
+    from app.models.document import Document
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            delete(Document).where(
+                Document.deleted_at.is_not(None),
+                Document.deleted_at < cutoff,
+            )
+        )
+        await db.commit()
+    logger.info("Trash cleanup complete (cutoff: %s)", cutoff.date())
+
+
+async def _trash_cleanup_loop() -> None:
+    """Run trash cleanup once per day."""
+    while True:
+        await asyncio.sleep(24 * 3600)
+        try:
+            await _cleanup_expired_trash()
+        except Exception as exc:
+            logger.error("Periodic trash cleanup failed: %s", exc)
 
 
 async def _seed_super_admin() -> None:

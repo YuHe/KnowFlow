@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import urllib.parse
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -36,7 +37,6 @@ class DocCreate(BaseModel):
     content_md: str = ""
     content_html: str = ""
     template_id: Optional[uuid.UUID] = None
-    sort_order: int = 0
 
 
 class DocUpdate(BaseModel):
@@ -75,6 +75,8 @@ def _doc_to_dict(doc: Document) -> dict:
         "template_id": str(doc.template_id) if doc.template_id else None,
         "created_by": str(doc.created_by) if doc.created_by else None,
         "updated_by": str(doc.updated_by) if doc.updated_by else None,
+        "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
+        "deleted_by": str(doc.deleted_by) if doc.deleted_by else None,
         "created_at": doc.created_at.isoformat(),
         "updated_at": doc.updated_at.isoformat(),
     }
@@ -102,11 +104,44 @@ def _count_words(text: str) -> int:
 
 
 async def _doc_or_404(doc_id: uuid.UUID, db: AsyncSession) -> Document:
-    result = await db.execute(select(Document).where(Document.id == doc_id))
+    """Return a non-deleted document, or 404."""
+    result = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.deleted_at.is_(None))
+    )
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
+
+
+async def _deleted_doc_or_404(doc_id: uuid.UUID, db: AsyncSession) -> Document:
+    """Return a soft-deleted document, or 404."""
+    result = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.deleted_at.is_not(None))
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found in trash")
+    return doc
+
+
+async def _next_sort_order(
+    db: AsyncSession,
+    kb_id: uuid.UUID,
+    section_id: Optional[uuid.UUID],
+    parent_id: Optional[uuid.UUID],
+) -> int:
+    """Compute max sort_order among non-deleted siblings and return max + 1."""
+    result = await db.execute(
+        select(func.max(Document.sort_order)).where(
+            Document.knowledge_base_id == kb_id,
+            Document.section_id == section_id,
+            Document.parent_id == parent_id,
+            Document.deleted_at.is_(None),
+        )
+    )
+    max_order = result.scalar()
+    return (max_order + 1) if max_order is not None else 0
 
 
 # ---- Routes -----------------------------------------------------------------
@@ -123,10 +158,12 @@ async def list_docs(
     current_user: User = Depends(get_current_active_user),
     role: str = Depends(require_kb_role("viewer")),
 ):
-    from sqlalchemy import func
     from sqlalchemy.orm import selectinload
 
-    stmt = select(Document).where(Document.knowledge_base_id == kb_id)
+    stmt = select(Document).where(
+        Document.knowledge_base_id == kb_id,
+        Document.deleted_at.is_(None),
+    )
     if section_id is not None:
         stmt = stmt.where(Document.section_id == section_id)
     if order_by == "updated_at":
@@ -135,14 +172,16 @@ async def list_docs(
         stmt = stmt.order_by(Document.sort_order.asc())
     stmt = stmt.options(selectinload(Document.creator), selectinload(Document.updater))
 
-    # Count total
+    # Count total (non-deleted)
     count_stmt = select(func.count()).select_from(
-        select(Document).where(Document.knowledge_base_id == kb_id).subquery()
+        select(Document).where(
+            Document.knowledge_base_id == kb_id,
+            Document.deleted_at.is_(None),
+        ).subquery()
     )
     total_result = await db.execute(count_stmt)
     total = total_result.scalar() or 0
 
-    # Paginate
     stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(stmt)
     docs = result.scalars().all()
@@ -157,6 +196,9 @@ async def create_doc(
     current_user: User = Depends(get_current_active_user),
     role: str = Depends(require_kb_role("editor")),
 ):
+    # Always auto-compute sort_order so new docs appear last among siblings
+    sort_order = await _next_sort_order(db, kb_id, payload.section_id, payload.parent_id)
+
     doc = Document(
         knowledge_base_id=kb_id,
         section_id=payload.section_id,
@@ -164,7 +206,7 @@ async def create_doc(
         title=payload.title,
         content_md=payload.content_md,
         content_html=payload.content_html,
-        sort_order=payload.sort_order,
+        sort_order=sort_order,
         template_id=payload.template_id,
         created_by=current_user.id,
         updated_by=current_user.id,
@@ -224,7 +266,6 @@ async def update_doc(
     doc.updated_by = current_user.id
     await db.flush()
 
-    # Create a version snapshot on manual save
     if payload.is_manual_save:
         await create_version(
             db=db,
@@ -251,8 +292,10 @@ async def delete_doc(
         if not can_edit_doc(current_user.id, doc.created_by, role or ""):
             raise HTTPException(status_code=403, detail="You cannot delete this document")
 
-    await db.delete(doc)
-    return ok({"message": "Document deleted."})
+    doc.deleted_at = datetime.now(timezone.utc)
+    doc.deleted_by = current_user.id
+    await db.flush()
+    return ok({"message": "Document moved to trash."})
 
 
 @router.post("/docs/{doc_id}/move")
@@ -270,7 +313,6 @@ async def move_doc(
             raise HTTPException(status_code=403, detail="You cannot move this document")
 
     if payload.knowledge_base_id and payload.knowledge_base_id != doc.knowledge_base_id:
-        # Verify user has editor+ in the target KB
         role = await get_kb_member_role(db, payload.knowledge_base_id, current_user.id)
         if not role or ROLE_LEVELS.get(role, 0) < ROLE_LEVELS["editor"]:
             raise HTTPException(
@@ -301,13 +343,16 @@ async def duplicate_doc(
                 status_code=403, detail="Editor permission required to duplicate documents"
             )
 
+    sort_order = await _next_sort_order(db, doc.knowledge_base_id, doc.section_id, doc.parent_id)
+
     new_doc = Document(
         knowledge_base_id=doc.knowledge_base_id,
         section_id=doc.section_id,
+        parent_id=doc.parent_id,
         title=f"{doc.title} (copy)",
         content_md=doc.content_md,
         content_html=doc.content_html,
-        sort_order=doc.sort_order + 1,
+        sort_order=sort_order,
         template_id=doc.template_id,
         created_by=current_user.id,
         updated_by=current_user.id,
@@ -316,6 +361,71 @@ async def duplicate_doc(
     db.add(new_doc)
     await db.flush()
     return ok(_doc_to_dict(new_doc))
+
+
+# ---- Trash endpoints --------------------------------------------------------
+
+
+@router.get("/kb/{kb_id}/trash")
+async def list_trash(
+    kb_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    role: str = Depends(require_kb_role("viewer")),
+):
+    from sqlalchemy.orm import selectinload
+
+    stmt = (
+        select(Document)
+        .where(
+            Document.knowledge_base_id == kb_id,
+            Document.deleted_at.is_not(None),
+        )
+        .order_by(Document.deleted_at.desc())
+        .options(selectinload(Document.creator), selectinload(Document.updater))
+    )
+    result = await db.execute(stmt)
+    docs = result.scalars().all()
+    return ok([_doc_to_list_dict(d) for d in docs])
+
+
+@router.post("/docs/{doc_id}/restore")
+async def restore_doc(
+    doc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    doc = await _deleted_doc_or_404(doc_id, db)
+
+    if current_user.role != "super_admin":
+        role = await get_kb_member_role(db, doc.knowledge_base_id, current_user.id)
+        if not can_edit_doc(current_user.id, doc.created_by, role or ""):
+            raise HTTPException(status_code=403, detail="You cannot restore this document")
+
+    doc.deleted_at = None
+    doc.deleted_by = None
+    await db.flush()
+    return ok(_doc_to_dict(doc))
+
+
+@router.delete("/docs/{doc_id}/permanent")
+async def permanent_delete_doc(
+    doc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    doc = await _deleted_doc_or_404(doc_id, db)
+
+    if current_user.role != "super_admin":
+        role = await get_kb_member_role(db, doc.knowledge_base_id, current_user.id)
+        if not can_edit_doc(current_user.id, doc.created_by, role or ""):
+            raise HTTPException(status_code=403, detail="You cannot permanently delete this document")
+
+    await db.delete(doc)
+    return ok({"message": "Document permanently deleted."})
+
+
+# ---- Export -----------------------------------------------------------------
 
 
 @router.get("/docs/{doc_id}/export")
@@ -333,7 +443,6 @@ async def export_doc(
             raise HTTPException(status_code=403, detail="Access denied")
 
     safe_title = doc.title.replace("/", "_").replace("\\", "_")
-    # RFC 5987 encoded filename for Unicode support (e.g. Chinese titles)
     encoded_title = urllib.parse.quote(safe_title, safe="")
 
     if format == "md":

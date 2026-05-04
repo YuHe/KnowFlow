@@ -203,6 +203,14 @@ class Document(Base):
         onupdate=_utcnow,
         server_default=func.now(),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     knowledge_base: Mapped["app.models.knowledge_base.KnowledgeBase"] = relationship(
         "KnowledgeBase", back_populates="documents", lazy="select"
@@ -232,6 +240,9 @@ class Document(Base):
     )
     updater: Mapped["app.models.user.User | None"] = relationship(
         "User", foreign_keys=[updated_by], lazy="select"
+    )
+    deleter: Mapped["app.models.user.User | None"] = relationship(
+        "User", foreign_keys=[deleted_by], lazy="select"
     )
     versions: Mapped[list["DocumentVersion"]] = relationship(
         "DocumentVersion",
