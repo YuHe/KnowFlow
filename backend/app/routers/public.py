@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -198,13 +199,20 @@ async def access_share(
         if not verify_password(password, share.password_hash):
             return err("WRONG_PASSWORD", "Incorrect share password.", 401)
 
-    # Load document
+    # Load document with creator and updater
     doc_result = await db.execute(
-        select(Document).where(Document.id == share.document_id)
+        select(Document)
+        .options(selectinload(Document.creator), selectinload(Document.updater))
+        .where(Document.id == share.document_id)
     )
     doc = doc_result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    def _user_dict(u: User | None) -> dict | None:
+        if not u:
+            return None
+        return {"display_name": u.display_name, "username": u.username}
 
     return ok(
         {
@@ -213,7 +221,9 @@ async def access_share(
             "content_md": doc.content_md,
             "content_html": doc.content_html,
             "word_count": doc.word_count,
-            "share_expiry": share.expires_at.isoformat() if share.expires_at else None,
+            "created_by_user": _user_dict(doc.creator),
+            "updated_by_user": _user_dict(doc.updater),
             "updated_at": doc.updated_at.isoformat(),
+            "share_expiry": share.expires_at.isoformat() if share.expires_at else None,
         }
     )

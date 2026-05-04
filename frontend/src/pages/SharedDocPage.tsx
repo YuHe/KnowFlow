@@ -8,8 +8,11 @@ interface SharedDocData {
   title: string
   content_html: string
   content_md: string
-  share_expiry?: string
+  word_count?: number
+  created_by_user?: { display_name?: string; username: string } | null
+  updated_by_user?: { display_name?: string; username: string } | null
   updated_at?: string
+  share_expiry?: string
 }
 
 const fetchSharedDoc = async (shareCode: string, password?: string): Promise<SharedDocData> => {
@@ -186,13 +189,34 @@ const SharedDocPage: React.FC = () => {
 
       {/* Doc content */}
       <div className="flex-1 w-full max-w-3xl mx-auto px-8 py-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">{doc.title || '无标题'}</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">{doc.title || '无标题'}</h1>
 
-        {doc.share_expiry && (
-          <p className="text-xs text-gray-400 mb-6">
-            有效期至 {new Date(doc.share_expiry).toLocaleDateString('zh-CN')}
-          </p>
-        )}
+        {/* Meta info */}
+        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 mb-6 pb-6 border-b border-gray-200">
+          {doc.created_by_user && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center text-xs text-indigo-600 font-medium">
+                {(doc.created_by_user.display_name || doc.created_by_user.username)[0].toUpperCase()}
+              </div>
+              <span>创建者：{doc.created_by_user.display_name || doc.created_by_user.username}</span>
+            </div>
+          )}
+          {doc.updated_by_user && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs text-green-600 font-medium">
+                {(doc.updated_by_user.display_name || doc.updated_by_user.username)[0].toUpperCase()}
+              </div>
+              <span>最后编辑：{doc.updated_by_user.display_name || doc.updated_by_user.username}</span>
+            </div>
+          )}
+          {doc.updated_at && (
+            <span>{new Date(doc.updated_at).toLocaleString('zh-CN')}</span>
+          )}
+          {doc.word_count != null && <span>{doc.word_count} 字</span>}
+          {doc.share_expiry && (
+            <span>有效期至 {new Date(doc.share_expiry).toLocaleDateString('zh-CN')}</span>
+          )}
+        </div>
 
         <DocViewer content={doc.content_html || ''} containerRef={contentRef} />
       </div>
