@@ -16,7 +16,7 @@ interface DocState {
 
   // Actions
   fetchDoc: (kbId: string, docId: string) => Promise<void>
-  fetchRecentKbDocs: (kbId: string) => Promise<void>
+  fetchRecentKbDocs: (kbId: string, params?: { updated_after?: string; updated_before?: string; page_size?: number }) => Promise<void>
   setDoc: (doc: Document | null) => void
   markDirty: () => void
   markSaved: () => void
@@ -48,9 +48,15 @@ export const useDocStore = create<DocState>((set, get) => ({
     }
   },
 
-  fetchRecentKbDocs: async (kbId: string) => {
+  fetchRecentKbDocs: async (kbId: string, params?: { updated_after?: string; updated_before?: string; page_size?: number }) => {
     try {
-      const result = await docsApi.getDocs(kbId, { page: 1, page_size: 10, order_by: 'updated_at' })
+      const result = await docsApi.getDocs(kbId, {
+        page: 1,
+        page_size: params?.page_size ?? 30,
+        order_by: 'updated_at',
+        updated_after: params?.updated_after,
+        updated_before: params?.updated_before,
+      })
       const items = Array.isArray(result) ? result : (result as { items?: DocumentListItem[] }).items ?? []
       set({ recentDocs: items })
     } catch {

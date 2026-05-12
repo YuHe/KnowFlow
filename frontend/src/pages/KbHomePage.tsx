@@ -1,12 +1,73 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useKbStore } from '@/store/kbStore';
 import { useDocStore } from '@/store/docStore';
 import { useTreeStore } from '@/store/treeStore';
 import { docsApi } from '@/api/docs';
 import { ROLE_LEVELS } from '@/types';
+import type { DocumentListItem } from '@/types';
 import KbIconEditor from '@/components/kb/KbIconEditor';
 import KbIcon from '@/components/kb/KbIcon';
+import DatePicker from '@/components/ui/DatePicker';
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+type DatePreset = 'today' | '3d' | '7d' | '30d' | 'custom'
+
+function getDateRange(preset: DatePreset, customDate?: string | null): { updated_after: string; updated_before: string } {
+  const now = new Date()
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+  const before = endOfToday.toISOString()
+
+  if (preset === 'custom' && customDate) {
+    return { updated_after: `${customDate}T00:00:00`, updated_before: `${customDate}T23:59:59` }
+  }
+
+  const daysMap: Record<string, number> = { today: 0, '3d': 2, '7d': 6, '30d': 29 }
+  const daysBack = daysMap[preset] ?? 6
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack, 0, 0, 0)
+  return { updated_after: start.toISOString(), updated_before: before }
+}
+
+const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+function groupDocsByDate(docs: DocumentListItem[]): { label: string; docs: DocumentListItem[] }[] {
+  const today = new Date()
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+  const groups: Map<string, { label: string; docs: DocumentListItem[] }> = new Map()
+
+  for (const doc of docs) {
+    const d = new Date(doc.updated_at)
+    const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    if (!groups.has(dateKey)) {
+      let label: string
+      if (d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate()) {
+        label = '今天'
+      } else if (d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate()) {
+        label = '昨天'
+      } else {
+        label = `${d.getMonth() + 1}月${d.getDate()}日 ${WEEKDAY_NAMES[d.getDay()]}`
+      }
+      groups.set(dateKey, { label, docs: [] })
+    }
+    groups.get(dateKey)!.docs.push(doc)
+  }
+  return Array.from(groups.values())
+}
+
+function formatTime(isoStr: string): string {
+  const d = new Date(isoStr)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
+
+const PRESETS: { key: DatePreset; label: string }[] = [
+  { key: 'today', label: '今天' },
+  { key: '3d', label: '近3天' },
+  { key: '7d', label: '近7天' },
+  { key: '30d', label: '近30天' },
+]
 
 const KbHomePage: React.FC = () => {
   const { kbId } = useParams<{ kbId: string }>();
@@ -15,6 +76,16 @@ const KbHomePage: React.FC = () => {
   const { recentDocs, fetchRecentKbDocs } = useDocStore();
   const { fetchTree } = useTreeStore();
   const [isCreating, setIsCreating] = useState(false);
+  const [datePreset, setDatePreset] = useState<DatePreset>('7d');
+  const [customDate, setCustomDate] = useState<string | null>(null);
+  const [recentLoading, setRecentLoading] = useState(false);
+
+  const { updated_after, updated_before } = useMemo(
+    () => getDateRange(datePreset, customDate),
+    [datePreset, customDate]
+  );
+
+  const groupedDocs = useMemo(() => groupDocsByDate(recentDocs), [recentDocs]);
 
   const handleCreateDoc = async () => {
     if (!kbId || isCreating) return;
@@ -22,7 +93,7 @@ const KbHomePage: React.FC = () => {
     try {
       const doc = await docsApi.createDoc(kbId, { title: '无标题文档', content_md: '' });
       await fetchTree(kbId);
-      await fetchRecentKbDocs(kbId);
+      await fetchRecentKbDocs(kbId, { updated_after, updated_before });
       navigate(`/kb/${kbId}/docs/${doc.id}`, { state: { startEditing: true } });
     } finally {
       setIsCreating(false);
@@ -33,10 +104,15 @@ const KbHomePage: React.FC = () => {
     if (kbId) {
       fetchKbById(kbId);
       fetchTree(kbId);
-      fetchRecentKbDocs(kbId);
     }
   }, [kbId]);
 
+  useEffect(() => {
+    if (kbId) {
+      setRecentLoading(true);
+      fetchRecentKbDocs(kbId, { updated_after, updated_before }).finally(() => setRecentLoading(false));
+    }
+  }, [kbId, updated_after, updated_before]);
 
   if (kbLoading) {
     return (
@@ -83,7 +159,7 @@ const KbHomePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-center gap-3 mb-12">
+          <div className="flex items-center justify-center gap-3 mb-10">
             <button
               onClick={handleCreateDoc}
               disabled={isCreating}
@@ -96,51 +172,105 @@ const KbHomePage: React.FC = () => {
             </button>
           </div>
 
-          {recentDocs.length > 0 && (
-            <section>
-              <h2 className="text-base font-semibold mb-4">最近更新的文档</h2>
-              <div className="space-y-2">
-                {recentDocs.map((doc) => (
-                  <Link
-                    key={doc.id}
-                    to={`/kb/${kbId}/docs/${doc.id}`}
-                    className="flex items-start gap-3 px-4 py-3 bg-background border rounded-xl hover:border-primary/30 transition"
+          {/* ── Recently Updated Section ─────────────────────────────── */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-gray-900">最近更新</h2>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {PRESETS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => { setDatePreset(key); setCustomDate(null); }}
+                    className={`px-2.5 py-1 text-xs rounded-md font-medium transition
+                      ${datePreset === key && !customDate
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
                   >
-                    <svg className="w-4 h-4 text-primary/60 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{doc.title || '无标题'}</p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
-                        {doc.created_by_user && (
-                          <span className="flex items-center gap-1">
-                            <span className="inline-flex w-4 h-4 rounded-full bg-primary/10 items-center justify-center text-primary font-medium text-[10px]">
-                              {(doc.created_by_user.display_name || doc.created_by_user.username)?.[0]?.toUpperCase()}
-                            </span>
-                            创建：{doc.created_by_user.display_name || doc.created_by_user.username}
-                          </span>
-                        )}
-                        {doc.created_at && (
-                          <span>{new Date(doc.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                        )}
+                    {label}
+                  </button>
+                ))}
+                {customDate && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md bg-primary/10 text-primary font-medium">
+                    {customDate}
+                    <button
+                      onClick={() => { setCustomDate(null); setDatePreset('7d'); }}
+                      className="ml-0.5 hover:text-primary/70"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                )}
+                <DatePicker
+                  value={customDate}
+                  onSelect={(d) => { setCustomDate(d); setDatePreset('custom'); }}
+                />
+              </div>
+            </div>
+
+            {/* Loading */}
+            {recentLoading && (
+              <div className="flex items-center justify-center py-10">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            )}
+
+            {/* Empty */}
+            {!recentLoading && recentDocs.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <svg className="w-12 h-12 mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-sm">该时段内暂无文档更新</p>
+              </div>
+            )}
+
+            {/* Grouped List */}
+            {!recentLoading && groupedDocs.map((group) => (
+              <div key={group.label} className="mb-5">
+                <div className="flex items-center gap-2 mb-1.5 px-1">
+                  <span className="text-xs font-medium text-muted-foreground">{group.label}</span>
+                  <span className="text-xs text-muted-foreground/50">{group.docs.length}篇</span>
+                </div>
+                <div className="space-y-0.5">
+                  {group.docs.map((doc) => (
+                    <Link
+                      key={doc.id}
+                      to={`/kb/${kbId}/docs/${doc.id}`}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition group"
+                    >
+                      {/* Icon */}
+                      <svg className="w-4 h-4 text-primary/40 flex-shrink-0 group-hover:text-primary/60 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {/* Title */}
+                      <span className="flex-1 min-w-0 text-sm text-gray-800 truncate group-hover:text-gray-900 transition">
+                        {doc.title || '无标题'}
+                      </span>
+                      {/* Modifier + Time */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         {doc.updated_by_user && (
                           <span className="flex items-center gap-1">
-                            <span className="inline-flex w-4 h-4 rounded-full bg-green-100 items-center justify-center text-green-600 font-medium text-[10px]">
+                            <span className="inline-flex w-5 h-5 rounded-full bg-green-50 items-center justify-center text-green-600 text-[10px] font-medium">
                               {(doc.updated_by_user.display_name || doc.updated_by_user.username)?.[0]?.toUpperCase()}
                             </span>
-                            修改：{doc.updated_by_user.display_name || doc.updated_by_user.username}
+                            <span className="text-xs text-muted-foreground hidden sm:inline">
+                              {doc.updated_by_user.display_name || doc.updated_by_user.username}
+                            </span>
                           </span>
                         )}
-                        {doc.updated_at && (
-                          <span>{new Date(doc.updated_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                        )}
+                        <span className="text-xs text-muted-foreground/70 tabular-nums w-10 text-right">
+                          {formatTime(doc.updated_at)}
+                        </span>
                       </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </section>
-          )}
+            ))}
+          </section>
         </div>
     </div>
   );

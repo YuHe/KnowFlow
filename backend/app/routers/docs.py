@@ -154,16 +154,27 @@ async def list_docs(
     order_by: str = "sort_order",
     page: int = 1,
     page_size: int = 50,
+    updated_after: Optional[str] = None,
+    updated_before: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     role: str = Depends(require_kb_role("viewer")),
 ):
     from sqlalchemy.orm import selectinload
 
-    stmt = select(Document).where(
+    base_filters = [
         Document.knowledge_base_id == kb_id,
         Document.deleted_at.is_(None),
-    )
+    ]
+
+    if updated_after:
+        after_dt = datetime.fromisoformat(updated_after)
+        base_filters.append(Document.updated_at >= after_dt)
+    if updated_before:
+        before_dt = datetime.fromisoformat(updated_before)
+        base_filters.append(Document.updated_at <= before_dt)
+
+    stmt = select(Document).where(*base_filters)
     if section_id is not None:
         stmt = stmt.where(Document.section_id == section_id)
     if order_by == "updated_at":
@@ -172,12 +183,9 @@ async def list_docs(
         stmt = stmt.order_by(Document.sort_order.asc())
     stmt = stmt.options(selectinload(Document.creator), selectinload(Document.updater))
 
-    # Count total (non-deleted)
+    # Count total (filtered)
     count_stmt = select(func.count()).select_from(
-        select(Document).where(
-            Document.knowledge_base_id == kb_id,
-            Document.deleted_at.is_(None),
-        ).subquery()
+        select(Document).where(*base_filters).subquery()
     )
     total_result = await db.execute(count_stmt)
     total = total_result.scalar() or 0
