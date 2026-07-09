@@ -4,7 +4,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Highlight from '@tiptap/extension-highlight'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
+import { ResizableImage } from './ResizableImage'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
@@ -128,7 +128,7 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
         openOnClick: false,
         HTMLAttributes: { class: 'text-indigo-600 underline hover:text-indigo-800' },
       }),
-      Image.configure({
+      ResizableImage.configure({
         allowBase64: true,
         HTMLAttributes: { class: 'max-w-full rounded-lg my-2' },
       }),
