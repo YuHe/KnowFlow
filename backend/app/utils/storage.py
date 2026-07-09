@@ -40,7 +40,9 @@ class LocalStorage:
             await f.write(content)
 
         storage_path = f"{kb_id}/{unique_name}"
-        url = f"{settings.PUBLIC_BASE_URL}/uploads/{storage_path}"
+        # Store a site-relative URL so it works under any domain (nginx
+        # reverse-proxies /uploads/ to the backend). Avoids hardcoding a host.
+        url = f"/uploads/{storage_path}"
         return storage_path, url
 
     async def delete(self, storage_path: str) -> None:

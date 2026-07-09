@@ -17,6 +17,13 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // Uploaded assets use site-relative URLs (/uploads/...); proxy them to
+      // the backend in dev, mirroring the nginx reverse proxy in production.
+      '/uploads': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   build: {
