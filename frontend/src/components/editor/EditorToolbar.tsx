@@ -89,14 +89,17 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [showHighlightPicker, setShowHighlightPicker] = useState(false)
   const [showHeading, setShowHeading] = useState(false)
+  const [showImageMenu, setShowImageMenu] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const colorPickerRef = useRef<HTMLDivElement>(null)
   const highlightPickerRef = useRef<HTMLDivElement>(null)
   const headingRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageMenuRef = useRef<HTMLDivElement>(null)
+  const imageFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!showColorPicker && !showHighlightPicker && !showHeading) return
+    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu) return
     const handle = (e: MouseEvent) => {
       if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setShowColorPicker(false)
@@ -107,10 +110,13 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
       if (showHeading && headingRef.current && !headingRef.current.contains(e.target as Node)) {
         setShowHeading(false)
       }
+      if (showImageMenu && imageMenuRef.current && !imageMenuRef.current.contains(e.target as Node)) {
+        setShowImageMenu(false)
+      }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker, showHighlightPicker, showHeading])
+  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu])
 
   if (!editor) return null
 
@@ -125,34 +131,30 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
     setLinkUrl('')
   }
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInsertImageUrl = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (imageUrl) {
+      editor.chain().focus().setImage({ src: imageUrl }).run()
+    }
+    setImageUrl('')
+    setShowImageMenu(false)
+  }
+
+  const handleImageFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !onFileUpload) return
-    // Reset input so selecting the same file again works
     e.target.value = ''
+    if (!file || !onFileUpload) return
+    if (!file.type.startsWith('image/')) return
+    setShowImageMenu(false)
     setIsUploading(true)
     try {
       const url = await onFileUpload(file)
       if (url) {
-        if (file.type.startsWith('image/')) {
-          editor.chain().focus().setImage({ src: url, alt: file.name }).run()
-        } else {
-          // Insert as a downloadable link
-          editor
-            .chain()
-            .focus()
-            .insertContent(`<a href="${url}" target="_blank" rel="noopener noreferrer">${file.name}</a>`)
-            .run()
-        }
+        editor.chain().focus().setImage({ src: url, alt: file.name }).run()
       }
     } finally {
       setIsUploading(false)
     }
-  }
-
-  const handleInsertImage = () => {
-    const url = prompt('输入图片 URL:')
-    if (url) editor.chain().focus().setImage({ src: url }).run()
   }
 
   const handleInsertTable = () => {
@@ -514,41 +516,64 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
         )}
       </div>
 
-      {/* Image */}
-      <ToolbarButton onClick={handleInsertImage} title="插入图片(URL)">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      </ToolbarButton>
-
-      {/* File / image upload button */}
-      {onFileUpload && (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
-            className="hidden"
-            onChange={handleFileSelected}
-          />
-          <ToolbarButton
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            title="上传文件 / 图片"
-          >
-            {isUploading ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-              </svg>
+      {/* Image — insert from URL or upload local file */}
+      <div className="relative" ref={imageMenuRef}>
+        <ToolbarButton
+          onClick={() => setShowImageMenu((v) => !v)}
+          disabled={isUploading}
+          title="插入图片"
+        >
+          {isUploading ? (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          )}
+        </ToolbarButton>
+        {showImageMenu && (
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-64">
+            {onFileUpload && (
+              <>
+                <input
+                  ref={imageFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageFileSelected}
+                />
+                <button
+                  type="button"
+                  onClick={() => imageFileInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  上传本地图片
+                </button>
+                <div className="my-1 border-t border-gray-100" />
+              </>
             )}
-          </ToolbarButton>
-        </>
-      )}
+            <form onSubmit={handleInsertImageUrl} className="flex items-center gap-1">
+              <input
+                type="url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="粘贴图片 URL..."
+                autoFocus
+                className="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <button type="submit" className="px-2 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition">
+                插入
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
 
       {/* Table */}
       <ToolbarButton onClick={handleInsertTable} title="插入表格">

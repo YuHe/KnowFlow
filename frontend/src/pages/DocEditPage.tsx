@@ -6,6 +6,7 @@ import EditorToolbar from '@/components/editor/EditorToolbar';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { useDocStore } from '@/store/docStore';
 import { docsApi } from '@/api/docs';
+import { uploadImage } from '@/api/upload';
 
 const saveStatusLabels: Record<string, string> = {
   idle: '',
@@ -128,7 +129,7 @@ const DocEditPage: React.FC = () => {
       </div>
 
       {/* Toolbar */}
-      {editorInstance && <EditorToolbar editor={editorInstance} zoom={zoom} onZoomChange={setZoom} sourceMode={sourceMode} onSourceModeChange={setSourceMode} />}
+      {editorInstance && <EditorToolbar editor={editorInstance} zoom={zoom} onZoomChange={setZoom} sourceMode={sourceMode} onSourceModeChange={setSourceMode} onFileUpload={kbId ? (file) => uploadImage(kbId, file).catch(() => null) : undefined} />}
 
       {/* Editor Area — paper on grey canvas */}
       <div className="flex-1 overflow-y-auto py-8 px-4">
