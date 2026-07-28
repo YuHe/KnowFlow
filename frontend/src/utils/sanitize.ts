@@ -1,4 +1,4 @@
-import DOMPurify from 'dompurify'
+import DOMPurify, { type Config } from 'dompurify'
 
 /**
  * Sanitize untrusted HTML before injecting into the DOM via
@@ -22,7 +22,7 @@ const SVG_TAGS = [
   'style', 'label', 'switch', 'image', 'clipPath', 'pattern',
 ]
 
-const config: DOMPurify.Config = {
+const config: Config = {
   // Use a permissive allow-list approach: start from the default profile and
   // ADD the mermaid/SVG/extras rather than redefining ALLOWED_TAGS from scratch
   // (which would drop many legit tags the editor emits).

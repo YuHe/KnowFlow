@@ -1,4 +1,4 @@
-import { marked, type Tokens } from 'marked'
+import { marked, Marked, type Tokens } from 'marked'
 import { sanitizeHtml } from './sanitize'
 
 /**
@@ -27,15 +27,16 @@ const highlightExtension = {
  */
 function createRenderer(emitMermaidPlaceholder: boolean) {
   const renderer = new marked.Renderer()
-  renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+  renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
+    const lang = infostring || ''
     if (lang === 'mermaid' && emitMermaidPlaceholder) {
-      const encoded = text.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      const encoded = code.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       return `<div data-mermaid="${encoded}" contenteditable="false"></div>`
     }
     // Keep mermaid as an editable fenced code block (editor) or render other
     // languages as normal <pre><code>.
     const cls = lang ? ` class="language-${lang}"` : ''
-    return `<pre><code${cls}>${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`
+    return `<pre><code${cls}>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`
   }
   return renderer
 }
@@ -56,7 +57,7 @@ export function markdownToHtml(md: string, mermaidAsPlaceholder = true): string 
   if (mermaidAsPlaceholder) {
     html = marked.parse(md) as string
   } else {
-    const instance = new marked.Marked()
+    const instance = new Marked()
     instance.setOptions({ gfm: true, breaks: false })
     instance.use({ renderer: createRenderer(false), extensions: [highlightExtension] })
     html = instance.parse(md) as string

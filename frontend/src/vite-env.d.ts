@@ -20,3 +20,12 @@ declare module '*.webp' {
   const src: string
   export default src
 }
+
+// turndown-plugin-gfm ships no TypeScript declarations.
+declare module 'turndown-plugin-gfm' {
+  const gfm: () => void
+  const tables: () => void
+  const strikethrough: () => void
+  const taskListItems: () => void
+  export { gfm, tables, strikethrough, taskListItems }
+}
