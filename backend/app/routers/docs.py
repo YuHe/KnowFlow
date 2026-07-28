@@ -92,11 +92,55 @@ def _user_mini(user) -> dict | None:
     }
 
 
+# Columns fetched for list/tree/trash queries. MUST match exactly the
+# attributes read by _doc_to_list_dict — load_only() defers everything not
+# listed here, and accessing a deferred column under an async session raises
+# MissingGreenlet. content_md / content_html are intentionally excluded.
+_DOC_LIST_COLUMNS = (
+    Document.id,
+    Document.knowledge_base_id,
+    Document.section_id,
+    Document.parent_id,
+    Document.sort_order,
+    Document.title,
+    Document.is_public,
+    Document.template_id,
+    Document.created_by,
+    Document.updated_by,
+    Document.word_count,
+    Document.created_at,
+    Document.updated_at,
+    Document.deleted_at,
+    Document.deleted_by,
+)
+
+
 def _doc_to_list_dict(doc: Document) -> dict:
-    d = _doc_to_dict(doc)
-    d["created_by_user"] = _user_mini(doc.creator)
-    d["updated_by_user"] = _user_mini(doc.updater)
-    return d
+    # List payload excludes content_md / content_html (large body fields).
+    # The list/tree/trash UIs only need lightweight metadata; shipping the
+    # full body made a 243-doc KB return an 8.6MB JSON response and starved
+    # the document tree. Reads here MUST stay in sync with the load_only()
+    # projection on the list/trash queries — touching an excluded column
+    # under load_only raises MissingGreenlet in async sessions.
+    return {
+        "id": str(doc.id),
+        "knowledge_base_id": str(doc.knowledge_base_id),
+        "section_id": str(doc.section_id) if doc.section_id else None,
+        "parent_id": str(doc.parent_id) if doc.parent_id else None,
+        "title": doc.title,
+        "is_public": doc.is_public,
+        "sort_order": doc.sort_order,
+        "word_count": doc.word_count,
+        "template_id": str(doc.template_id) if doc.template_id else None,
+        "created_by": str(doc.created_by) if doc.created_by else None,
+        "updated_by": str(doc.updated_by) if doc.updated_by else None,
+        "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
+        "deleted_by": str(doc.deleted_by) if doc.deleted_by else None,
+        "created_at": doc.created_at.isoformat(),
+        "updated_at": doc.updated_at.isoformat(),
+        "created_by_user": _user_mini(doc.creator),
+        "updated_by_user": _user_mini(doc.updater),
+    }
 
 
 def _count_words(text: str) -> int:
@@ -160,7 +204,7 @@ async def list_docs(
     current_user: User = Depends(get_current_active_user),
     role: str = Depends(require_kb_role("viewer")),
 ):
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy.orm import load_only, selectinload
 
     base_filters = [
         Document.knowledge_base_id == kb_id,
@@ -181,7 +225,11 @@ async def list_docs(
         stmt = stmt.order_by(Document.updated_at.desc())
     else:
         stmt = stmt.order_by(Document.sort_order.asc())
-    stmt = stmt.options(selectinload(Document.creator), selectinload(Document.updater))
+    stmt = stmt.options(
+        selectinload(Document.creator),
+        selectinload(Document.updater),
+        load_only(*_DOC_LIST_COLUMNS),
+    )
 
     # Count total (filtered)
     count_stmt = select(func.count()).select_from(
@@ -381,7 +429,7 @@ async def list_trash(
     current_user: User = Depends(get_current_active_user),
     role: str = Depends(require_kb_role("viewer")),
 ):
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy.orm import load_only, selectinload
 
     stmt = (
         select(Document)
@@ -390,7 +438,11 @@ async def list_trash(
             Document.deleted_at.is_not(None),
         )
         .order_by(Document.deleted_at.desc())
-        .options(selectinload(Document.creator), selectinload(Document.updater))
+        .options(
+            selectinload(Document.creator),
+            selectinload(Document.updater),
+            load_only(*_DOC_LIST_COLUMNS),
+        )
     )
     result = await db.execute(stmt)
     docs = result.scalars().all()
