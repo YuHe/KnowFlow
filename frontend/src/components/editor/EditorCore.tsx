@@ -20,24 +20,26 @@ import TextAlign from '@tiptap/extension-text-align'
 import { Extension } from '@tiptap/core'
 import { createLowlight, common } from 'lowlight'
 import TurndownService from 'turndown'
+import * as turndownPluginGfm from 'turndown-plugin-gfm'
 import { uploadImage } from '../../api/upload'
 import { markdownToHtml } from '../../utils/markdown'
 
 // Shared turndown instance for HTML → Markdown conversion
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
-// Add GFM table rule
-turndown.addRule('tables', {
-  filter: ['table'],
-  replacement(_content, node) {
-    const table = node as HTMLTableElement
-    const rows = Array.from(table.rows)
-    if (!rows.length) return ''
-    const toRow = (cells: HTMLCollectionOf<HTMLTableCellElement>) =>
-      '| ' + Array.from(cells).map(c => c.textContent?.trim().replace(/\|/g, '\\|') ?? '').join(' | ') + ' |'
-    const header = toRow(rows[0].cells)
-    const separator = '| ' + Array.from(rows[0].cells).map(() => '---').join(' | ') + ' |'
-    const body = rows.slice(1).map(r => toRow(r.cells)).join('\n')
-    return '\n\n' + [header, separator, body].filter(Boolean).join('\n') + '\n\n'
+// GFM plugin handles tables and strikethrough (~~del~~).
+turndown.use(turndownPluginGfm.gfm)
+// Highlight (<mark>) → ==text== (parsed back by our marked highlight extension).
+turndown.addRule('highlight', {
+  filter: ['mark'],
+  replacement: (content) => `==${content}==`,
+})
+// TipTap task lists render as <li data-type="taskItem" data-checked="..."> with
+// no checkbox input, so the GFM plugin can't detect them — match explicitly.
+turndown.addRule('taskItem', {
+  filter: (node) => node.nodeName === 'LI' && (node as HTMLElement).getAttribute('data-type') === 'taskItem',
+  replacement(content, node) {
+    const checked = (node as HTMLElement).getAttribute('data-checked') === 'true'
+    return `- [${checked ? 'x' : ' '}] ${content.trim()}\n`
   },
 })
 

@@ -7,6 +7,7 @@ import { useAutoSave } from '@/hooks/useAutoSave';
 import { useDocStore } from '@/store/docStore';
 import { docsApi } from '@/api/docs';
 import { uploadImage } from '@/api/upload';
+import { htmlToMarkdown } from '@/components/editor/EditorCore';
 
 const saveStatusLabels: Record<string, string> = {
   idle: '',
@@ -53,7 +54,7 @@ const DocEditPage: React.FC = () => {
   const handleAutoSave = useCallback(
     async (html: string) => {
       if (!docId || docId === 'new' || !kbId) return;
-      const md = editorInstance?.getText() || '';
+      const md = htmlToMarkdown(html);
       await docsApi.updateDoc(docId, {
         title: titleRef.current,
         content_html: html,
@@ -68,7 +69,7 @@ const DocEditPage: React.FC = () => {
   const handleManualSave = useCallback(
     async (html: string) => {
       if (!docId || docId === 'new' || !kbId) return;
-      const md = editorInstance?.getText() || '';
+      const md = htmlToMarkdown(html);
       await docsApi.updateDoc(docId, {
         title: titleRef.current,
         content_html: html,

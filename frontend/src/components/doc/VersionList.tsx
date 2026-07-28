@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, RotateCcw, Eye } from 'lucide-react'
 import { versionsApi } from '@/api/versions'
 import type { DocumentVersion, DocumentVersionDetail } from '@/types'
 import { Spinner } from '@/components/ui/spinner'
 import { formatDate } from '@/utils'
 import { toast } from '@/components/ui/use-toast'
+import { sanitizeHtml } from '@/utils/sanitize'
+import { renderMermaidBlocks } from '@/utils/mermaid'
 
 interface VersionListProps {
   docId: string
@@ -25,6 +27,14 @@ export default function VersionList({ docId, onClose, onRestore }: VersionListPr
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [previewVersion, setPreviewVersion] = useState<DocumentVersionDetail | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const previewRef = useRef<HTMLDivElement>(null)
+
+  // Render mermaid diagrams in the version preview once loaded.
+  useEffect(() => {
+    if (previewVersion && previewRef.current && !previewLoading) {
+      renderMermaidBlocks(previewRef.current)
+    }
+  }, [previewVersion, previewLoading])
 
   const loadVersions = async () => {
     setLoading(true)
@@ -173,8 +183,9 @@ export default function VersionList({ docId, onClose, onRestore }: VersionListPr
                       </div>
                     ) : (
                       <div
+                        ref={previewRef}
                         className="text-xs text-gray-700 prose prose-xs max-w-none max-h-48 overflow-y-auto"
-                        dangerouslySetInnerHTML={{ __html: previewVersion.content_html }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewVersion.content_html) }}
                       />
                     )}
                     <button

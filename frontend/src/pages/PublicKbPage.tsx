@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../api/client';
 import KbIcon from '@/components/kb/KbIcon';
+import { sanitizeHtml } from '@/utils/sanitize';
+import { markdownToHtml } from '@/utils/markdown';
+import { renderMermaidBlocks } from '@/utils/mermaid';
 
 interface PublicKbData {
   id: string;
@@ -56,11 +59,21 @@ const PublicKbPage: React.FC = () => {
         `/public/kb/${kbSlug}/docs/${docId}`
       );
       const doc = res.data.data;
-      setSelectedDoc({ title: doc.title, content_html: doc.content_html || doc.content_md || '' });
+      // Fallback: render content_md as markdown when content_html is absent.
+      const html = doc.content_html || (doc.content_md ? markdownToHtml(doc.content_md) : '');
+      setSelectedDoc({ title: doc.title, content_html: html });
     } catch {
       setSelectedDoc(null);
     }
   };
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Render mermaid diagrams when the selected doc changes.
+  useEffect(() => {
+    if (contentRef.current) {
+      renderMermaidBlocks(contentRef.current);
+    }
+  }, [selectedDoc]);
 
   if (loading) {
     return (
@@ -130,8 +143,9 @@ const PublicKbPage: React.FC = () => {
               <h1 className="text-3xl font-bold text-gray-900 mb-4">{selectedDoc.title || '无标题'}</h1>
               <hr className="border-gray-200 mb-6" />
               <div
-                className="prose prose-gray max-w-none"
-                dangerouslySetInnerHTML={{ __html: selectedDoc.content_html }}
+                ref={contentRef}
+                className="prose prose-gray max-w-none doc-content"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedDoc.content_html) }}
               />
             </div>
           ) : (
