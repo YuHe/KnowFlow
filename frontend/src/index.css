@@ -337,6 +337,19 @@
 
   .doc-content img { @apply max-w-full rounded-lg my-4; height: auto; }
 
+  /* Mermaid diagrams */
+  .doc-content [data-mermaid],
+  .doc-content .mermaid-rendered {
+    margin: 1rem 0;
+    text-align: center;
+    overflow-x: auto;
+  }
+  .doc-content [data-mermaid] svg,
+  .doc-content .mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+  }
+
   .doc-content table { @apply w-full border-collapse my-4 text-sm; table-layout: fixed; }
   .doc-content table td,
   .doc-content table th { @apply border border-border p-2 text-left align-top; }

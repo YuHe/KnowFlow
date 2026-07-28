@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { renderMermaidBlocks } from '@/utils/mermaid'
 
 interface DocViewerProps {
   content: string
@@ -15,6 +16,12 @@ export default function DocViewer({ content, containerRef }: DocViewerProps) {
         el.id = `heading-${i}`
       }
     })
+  }, [content, containerRef])
+
+  // Render mermaid diagrams after content updates.
+  useEffect(() => {
+    if (!containerRef.current) return
+    renderMermaidBlocks(containerRef.current)
   }, [content, containerRef])
 
   return (

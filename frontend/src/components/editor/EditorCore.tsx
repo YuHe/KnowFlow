@@ -19,9 +19,9 @@ import Color from '@tiptap/extension-color'
 import TextAlign from '@tiptap/extension-text-align'
 import { Extension } from '@tiptap/core'
 import { createLowlight, common } from 'lowlight'
-import { marked } from 'marked'
 import TurndownService from 'turndown'
 import { uploadImage } from '../../api/upload'
+import { markdownToHtml } from '../../utils/markdown'
 
 // Shared turndown instance for HTML → Markdown conversion
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
@@ -70,13 +70,7 @@ const FontSize = Extension.create({
 
 const lowlight = createLowlight(common)
 
-// Configure marked: GFM enabled (handles pipe tables, task lists, etc.)
-marked.setOptions({ gfm: true, breaks: false })
-
-/** Convert markdown text to HTML using marked */
-function markdownToHtml(md: string): string {
-  return marked.parse(md) as string
-}
+// Markdown rendering (GFM + mermaid) is configured in utils/markdown.
 
 /** Detect if text looks like markdown (has md syntax patterns) */
 function looksLikeMarkdown(text: string): boolean {
@@ -232,15 +226,16 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
       // Convert current rich-text content to Markdown for display in textarea
       setSourceContent(htmlToMarkdown(editor.getHTML()))
     } else if (!sourceMode && editor && sourceContent) {
-      // Convert Markdown back to HTML and load into editor
-      const html = markdownToHtml(sourceContent)
+      // Convert Markdown back to HTML and load into editor — keep mermaid as
+      // an editable fenced code block in the editor.
+      const html = markdownToHtml(sourceContent, false)
       editor.commands.setContent(html)
     }
   }, [sourceMode])
 
   const handleMdConfirm = () => {
     if (!mdPrompt || !editor) return
-    const html = markdownToHtml(mdPrompt.text)
+    const html = markdownToHtml(mdPrompt.text, false)
     editor.chain().focus().insertContent(html).run()
     setMdPrompt(null)
   }
@@ -294,8 +289,10 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
           onChange={(e) => {
             const md = e.target.value
             setSourceContent(md)
-            // Convert Markdown → HTML before passing to onUpdate so auto-save gets correct HTML
-            onUpdate(markdownToHtml(md), md.length)
+            // Convert Markdown → HTML before passing to onUpdate so auto-save
+            // gets correct HTML. Mermaid is kept as a code block; the read view
+            // renders it (renderMermaidBlocks handles language-mermaid).
+            onUpdate(markdownToHtml(md, false), md.length)
           }}
           spellCheck={false}
         />

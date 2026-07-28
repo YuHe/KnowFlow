@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import type { Editor } from '@tiptap/react';
-import { marked } from 'marked';
-marked.setOptions({ gfm: true, breaks: false });
+import { markdownToHtml } from '@/utils/markdown';
 import { useDocStore } from '@/store/docStore';
 import { useKbStore } from '@/store/kbStore';
 import { favoritesApi } from '@/api/favorites';
@@ -142,7 +141,7 @@ const DocReadPage: React.FC = () => {
     if (!currentDoc) return;
     setTitle(currentDoc.title || '');
     const content = currentDoc.content_html
-      || (currentDoc.content_md ? (marked.parse(currentDoc.content_md) as string) : '');
+      || (currentDoc.content_md ? markdownToHtml(currentDoc.content_md) : '');
     setInitialContent(content);
     lastSavedHtmlRef.current = currentDoc.content_html || '';
     setIsEditing(true);
@@ -354,7 +353,7 @@ const DocReadPage: React.FC = () => {
   // READ MODE
   // ─────────────────────────────────────────────────────────────────
   const rawContent = currentDoc.content_html || ''
-  const content = rawContent || (currentDoc.content_md ? (marked.parse(currentDoc.content_md) as string) : '')
+  const content = rawContent || (currentDoc.content_md ? markdownToHtml(currentDoc.content_md) : '')
   const readWordCount = currentDoc.word_count || 0;
 
   return (
