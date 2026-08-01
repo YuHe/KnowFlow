@@ -1,29 +1,14 @@
-import type Mermaid from 'mermaid'
+import MermaidDefault from 'mermaid'
 
-let mermaidLib: typeof Mermaid | null = null
-
-// Start downloading the mermaid chunk (237 KB) as soon as this module is
-// imported, rather than waiting until the first diagram is rendered.  The
-// download runs in parallel with the rest of the app bundle, so by the time
-// a user opens a document containing mermaid diagrams the chunk is already
-// cached and renders near-instantly instead of after a 4-5 s delay.
-let initPromise: Promise<typeof Mermaid> = import('mermaid').then((mod) => {
-  const m = mod.default
-  m.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    securityLevel: 'strict',
-    fontFamily: 'inherit',
-  })
-  mermaidLib = m
-  return m
+// Initialize mermaid at module load time — no async, no dynamic import.
+// Mermaid is now bundled into the vendor chunk, so it's available
+// synchronously when this module is imported.
+MermaidDefault.initialize({
+  startOnLoad: false,
+  theme: 'default',
+  securityLevel: 'strict',
+  fontFamily: 'inherit',
 })
-
-/** Returns the initialized mermaid instance (already preloaded at import time). */
-async function getMermaid(): Promise<typeof Mermaid> {
-  if (mermaidLib) return mermaidLib
-  return initPromise
-}
 
 let renderSeq = 0
 
@@ -32,10 +17,9 @@ let renderSeq = 0
  * Returns the SVG string, or an error message box.
  */
 export async function renderMermaid(source: string): Promise<string> {
-  const m = await getMermaid()
   const id = `mermaid-${++renderSeq}`
   try {
-    const { svg } = await m.render(id, source)
+    const { svg } = await MermaidDefault.render(id, source)
     return svg
   } catch (err) {
     // mermaid.render can leave a stray error svg in the DOM; clean it up.
