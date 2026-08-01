@@ -269,7 +269,7 @@ const SharedDocPage: React.FC = () => {
       <LogoBar />
 
       {/* Doc content */}
-      <div className="flex-1 w-full max-w-3xl mx-auto px-8 py-10">
+      <div ref={contentRef} className="flex-1 w-full max-w-3xl mx-auto px-8 py-10">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">{doc.title || '无标题'}</h1>
 
         {/* Meta info */}
