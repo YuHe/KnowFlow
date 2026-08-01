@@ -3,6 +3,33 @@ import type Mermaid from 'mermaid'
 let mermaidLib: typeof Mermaid | null = null
 let initPromise: Promise<typeof Mermaid> | null = null
 
+// Eagerly start loading mermaid in the background after the critical rendering
+// path is done, so that by the time a user opens a document containing mermaid
+// diagrams the chunk is already cached.  This cuts the first-render delay from
+// ~5 s (lazy import of 237 KB chunk) to near-instant.
+if (typeof window !== 'undefined') {
+  const preload = () => {
+    if (!initPromise) {
+      initPromise = import('mermaid').then((mod) => {
+        const m = mod.default
+        m.initialize({
+          startOnLoad: false,
+          theme: 'default',
+          securityLevel: 'strict',
+          fontFamily: 'inherit',
+        })
+        mermaidLib = m
+        return m
+      })
+    }
+  }
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(preload, { timeout: 2000 })
+  } else {
+    setTimeout(preload, 200)
+  }
+}
+
 /** Lazy-load and initialize mermaid once. */
 async function getMermaid(): Promise<typeof Mermaid> {
   if (mermaidLib) return mermaidLib
