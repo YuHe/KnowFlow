@@ -1,51 +1,27 @@
 import type Mermaid from 'mermaid'
 
 let mermaidLib: typeof Mermaid | null = null
-let initPromise: Promise<typeof Mermaid> | null = null
 
-// Eagerly start loading mermaid in the background after the critical rendering
-// path is done, so that by the time a user opens a document containing mermaid
-// diagrams the chunk is already cached.  This cuts the first-render delay from
-// ~5 s (lazy import of 237 KB chunk) to near-instant.
-if (typeof window !== 'undefined') {
-  const preload = () => {
-    if (!initPromise) {
-      initPromise = import('mermaid').then((mod) => {
-        const m = mod.default
-        m.initialize({
-          startOnLoad: false,
-          theme: 'default',
-          securityLevel: 'strict',
-          fontFamily: 'inherit',
-        })
-        mermaidLib = m
-        return m
-      })
-    }
-  }
-  if ('requestIdleCallback' in window) {
-    requestIdleCallback(preload, { timeout: 2000 })
-  } else {
-    setTimeout(preload, 200)
-  }
-}
+// Start downloading the mermaid chunk (237 KB) as soon as this module is
+// imported, rather than waiting until the first diagram is rendered.  The
+// download runs in parallel with the rest of the app bundle, so by the time
+// a user opens a document containing mermaid diagrams the chunk is already
+// cached and renders near-instantly instead of after a 4-5 s delay.
+let initPromise: Promise<typeof Mermaid> = import('mermaid').then((mod) => {
+  const m = mod.default
+  m.initialize({
+    startOnLoad: false,
+    theme: 'default',
+    securityLevel: 'strict',
+    fontFamily: 'inherit',
+  })
+  mermaidLib = m
+  return m
+})
 
-/** Lazy-load and initialize mermaid once. */
+/** Returns the initialized mermaid instance (already preloaded at import time). */
 async function getMermaid(): Promise<typeof Mermaid> {
   if (mermaidLib) return mermaidLib
-  if (!initPromise) {
-    initPromise = import('mermaid').then((mod) => {
-      const m = mod.default
-      m.initialize({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'strict',
-        fontFamily: 'inherit',
-      })
-      mermaidLib = m
-      return m
-    })
-  }
   return initPromise
 }
 
