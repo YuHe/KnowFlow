@@ -327,6 +327,7 @@ const DocReadPage: React.FC = () => {
                 <EditorCore
                   content={initialContent}
                   kbId={kbId}
+                  docId={docId}
                   onEditorReady={(ed) => { setEditorInstance(ed); editorInstanceRef.current = ed; }}
                   onUpdate={handleEditorUpdate}
                   editable={true}

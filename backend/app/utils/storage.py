@@ -10,6 +10,24 @@ from fastapi import UploadFile
 
 from app.config import settings
 
+# Maps MIME types to file extensions so remote images whose URL has no
+# extension (or a non-image one) still land on disk with a sensible suffix.
+_MIME_EXT = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "image/bmp": ".bmp",
+    "image/x-icon": ".ico",
+    "image/avif": ".avif",
+}
+
+
+def _ext_from_mime(mime: str) -> str:
+    """Return a file extension for a MIME type, defaulting to .bin."""
+    return _MIME_EXT.get(mime.split(";")[0].strip().lower(), ".bin")
+
 
 class LocalStorage:
     def __init__(self, base_path: str) -> None:
@@ -42,6 +60,33 @@ class LocalStorage:
         storage_path = f"{kb_id}/{unique_name}"
         # Store a site-relative URL so it works under any domain (nginx
         # reverse-proxies /uploads/ to the backend). Avoids hardcoding a host.
+        url = f"/uploads/{storage_path}"
+        return storage_path, url
+
+    async def save_bytes(
+        self,
+        data: bytes,
+        kb_id: str,
+        filename: str,
+        mime_type: str,
+    ) -> tuple[str, str]:
+        """
+        Save raw bytes (e.g. a downloaded remote image) and return
+        (storage_path, public_url). Unlike save(), this takes bytes directly
+        because remote downloads bypass the UploadFile/SpooledTemporaryFile
+        machinery.
+        """
+        kb_dir = self.base_path / str(kb_id)
+        kb_dir.mkdir(parents=True, exist_ok=True)
+
+        ext = Path(filename).suffix or _ext_from_mime(mime_type)
+        unique_name = f"{uuid.uuid4().hex}{ext}"
+        dest = kb_dir / unique_name
+
+        async with aiofiles.open(dest, "wb") as f:
+            await f.write(data)
+
+        storage_path = f"{kb_id}/{unique_name}"
         url = f"/uploads/{storage_path}"
         return storage_path, url
 

@@ -27,6 +27,22 @@ export const assetsApi = {
     return response.data.data
   },
 
+  /**
+   * Download a remote image via the backend (browsers can't fetch cross-origin
+   * image bytes due to CORS) and return its now-local URL. SSRF-guarded server-side.
+   */
+  fetchRemoteImage: async (
+    url: string,
+    kb_id: string,
+    doc_id?: string,
+  ): Promise<{ url: string }> => {
+    const response = await apiClient.post<ApiResponse<{ url: string; filename: string; id: string }>>(
+      '/assets/fetch-remote',
+      { url, kb_id, doc_id },
+    )
+    return { url: response.data.data.url }
+  },
+
   deleteAsset: async (assetId: string): Promise<void> => {
     await apiClient.delete(`/assets/${assetId}`)
   },

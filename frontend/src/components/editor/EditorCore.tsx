@@ -23,6 +23,7 @@ import TurndownService from 'turndown'
 import * as turndownPluginGfm from 'turndown-plugin-gfm'
 import { uploadImage } from '../../api/upload'
 import { markdownToHtml } from '../../utils/markdown'
+import { localizeRemoteImages } from '../../utils/remoteImages'
 
 // Shared turndown instance for HTML → Markdown conversion
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
@@ -94,15 +95,17 @@ function looksLikeMarkdown(text: string): boolean {
 interface EditorCoreProps {
   content: string
   kbId: string
+  docId?: string
   onEditorReady: (editor: any) => void
   onUpdate: (html: string, wordCount: number) => void
   editable?: boolean
   sourceMode?: boolean
 }
 
-export default function EditorCore({ content, kbId, onEditorReady, onUpdate, editable = true, sourceMode = false }: EditorCoreProps) {
+export default function EditorCore({ content, kbId, docId, onEditorReady, onUpdate, editable = true, sourceMode = false }: EditorCoreProps) {
   const isFirstLoad = useRef(true)
   const [mdPrompt, setMdPrompt] = useState<{ text: string } | null>(null)
+  const [mdLoading, setMdLoading] = useState(false)
   const [sourceContent, setSourceContent] = useState('')
 
   const handleImageUpload = async (file: File): Promise<string | null> => {
@@ -235,11 +238,20 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
     }
   }, [sourceMode])
 
-  const handleMdConfirm = () => {
+  const handleMdConfirm = async () => {
     if (!mdPrompt || !editor) return
-    const html = markdownToHtml(mdPrompt.text, false)
-    editor.chain().focus().insertContent(html).run()
-    setMdPrompt(null)
+    setMdLoading(true)
+    try {
+      // Localize external image links before rendering: download each remote
+      // image server-side (CORS blocks browser fetch) and rewrite the markdown
+      // to point at the local copy. Failures fall back to the original URL.
+      const { md: localMd } = await localizeRemoteImages(mdPrompt.text, kbId, docId)
+      const html = markdownToHtml(localMd, false)
+      editor.chain().focus().insertContent(html).run()
+      setMdPrompt(null)
+    } finally {
+      setMdLoading(false)
+    }
   }
 
   const handleMdInsertPlain = () => {
@@ -253,28 +265,40 @@ export default function EditorCore({ content, kbId, onEditorReady, onUpdate, edi
       {/* Markdown paste prompt banner */}
       {mdPrompt && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">
-          <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="flex-1 text-blue-700">检测到您粘贴的内容可能是 Markdown 格式，是否渲染为富文本？</span>
+          {mdLoading ? (
+            <svg className="w-4 h-4 text-blue-500 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          <span className="flex-1 text-blue-700">
+            {mdLoading ? '正在下载外链图片并本地化…' : '检测到您粘贴的内容可能是 Markdown 格式，是否渲染为富文本？'}
+          </span>
           <button
             type="button"
             onClick={handleMdConfirm}
-            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition"
+            disabled={mdLoading}
+            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-wait"
           >
-            渲染为富文本
+            {mdLoading ? '处理中…' : '渲染为富文本'}
           </button>
           <button
             type="button"
             onClick={handleMdInsertPlain}
-            className="px-3 py-1 border border-gray-300 text-gray-600 text-xs rounded hover:bg-gray-50 transition"
+            disabled={mdLoading}
+            className="px-3 py-1 border border-gray-300 text-gray-600 text-xs rounded hover:bg-gray-50 transition disabled:opacity-50"
           >
             保留原始文本
           </button>
           <button
             type="button"
             onClick={() => setMdPrompt(null)}
-            className="p-1 text-gray-400 hover:text-gray-600 transition"
+            disabled={mdLoading}
+            className="p-1 text-gray-400 hover:text-gray-600 transition disabled:opacity-50"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

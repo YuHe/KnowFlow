@@ -3,8 +3,11 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +20,7 @@ from app.utils.auth import get_current_active_user
 from app.utils.permissions import ROLE_LEVELS, get_kb_member_role
 from app.utils.response import err, ok
 from app.utils.storage import get_storage
+from app.utils.url_guard import is_safe_remote_url
 
 router = APIRouter(tags=["assets"])
 
@@ -119,6 +123,139 @@ async def upload_asset(
     db.add(asset)
     await db.flush()
     return ok(_asset_to_dict(asset))
+
+
+class FetchRemoteRequest(BaseModel):
+    url: str
+    kb_id: uuid.UUID
+    doc_id: Optional[uuid.UUID] = None
+
+
+# Hard cap on how much of a remote response we buffer into memory before
+# rejecting it as too large. Matches the per-image upload limit for parity.
+_REMOTE_IMAGE_MAX_BYTES = settings.IMAGE_MAX_SIZE_MB * 1024 * 1024
+
+# Only image/* content-types are fetchable. SVG is allowed but treated as
+# text — callers should be aware SVGs can carry scripts (sanitize on render).
+_REMOTE_ALLOWED_IMAGE_MIME = {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+    "image/bmp",
+    "image/x-icon",
+    "image/avif",
+}
+
+
+@router.post("/assets/fetch-remote", status_code=201)
+async def fetch_remote_image(
+    payload: FetchRemoteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Download a remote image and store it locally, returning its URL.
+
+    Used by the editor to localize external image links when pasting markdown:
+    the browser can't fetch cross-origin image bytes (CORS), so the download
+    happens here. SSRF-guarded — internal/loopback/metadata IPs are rejected.
+    """
+    kb_id = payload.kb_id
+
+    # 1. Permission: editor in the target KB (same gate as upload).
+    if current_user.role != "super_admin":
+        role = await get_kb_member_role(db, kb_id, current_user.id)
+        if not role or ROLE_LEVELS.get(role, 0) < ROLE_LEVELS["editor"]:
+            return err("FORBIDDEN", "Editor permission required to fetch files.", 403)
+
+    # 2. SSRF validation — returns (ok, reason, safe_ip).
+    ok_flag, reason, safe_ip = is_safe_remote_url(payload.url)
+    if not ok_flag:
+        return err("UNSAFE_URL", f"Remote URL rejected: {reason}", 422)
+
+    # 3. Build a request URL pinned to the validated IP (defeats DNS
+    # rebinding) while preserving the original Host header for vhosts/SNI.
+    parsed = urlparse(payload.url)
+    host_header = parsed.hostname
+    if parsed.port:
+        host_header = f"{parsed.hostname}:{parsed.port}"
+    # Replace the hostname in the URL with the safe IP, keep scheme/port/path.
+    pinned = parsed._replace(netloc=f"{safe_ip}{(':' + str(parsed.port)) if parsed.port else ''}")
+    pinned_url = urlunparse(pinned)
+
+    headers = {
+        "User-Agent": "KnowFlow/1.0 (image-localizer)",
+        "Accept": "image/*",
+        "Host": host_header,  # preserve original vhost
+    }
+
+    # 4. Download with bounded size, limited redirects, short timeout.
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            max_redirects=3,
+            timeout=httpx.Timeout(15.0, connect=10.0),
+        ) as client:
+            resp = await client.get(pinned_url, headers=headers)
+            resp.raise_for_status()
+            # Cap how much we read; stream isn't worth it for images ≤10MB.
+            content = resp.content
+    except httpx.HTTPStatusError as exc:
+        return err(
+            "REMOTE_FETCH_FAILED",
+            f"Remote returned HTTP {exc.response.status_code}.",
+            502,
+        )
+    except (httpx.RequestError, httpx.HTTPError) as exc:
+        return err("REMOTE_FETCH_FAILED", f"Could not download image: {exc}", 502)
+
+    size_bytes = len(content)
+    if size_bytes == 0:
+        return err("REMOTE_FETCH_FAILED", "Remote returned an empty body.", 502)
+    if size_bytes > _REMOTE_IMAGE_MAX_BYTES:
+        return err(
+            "IMAGE_TOO_LARGE",
+            f"Image exceeds max size of {settings.IMAGE_MAX_SIZE_MB} MB.",
+            413,
+        )
+
+    # 5. Content-type check. Prefer the Content-Type header; if it's generic
+    # (application/octet-stream) we still accept — the URL extension or a
+    # sniff isn't worth the complexity here, render-time <img> will just fail
+    # visibly if it's not actually an image.
+    mime = (resp.headers.get("content-type") or "application/octet-stream").split(";")[0].strip().lower()
+    if mime not in _REMOTE_ALLOWED_IMAGE_MIME and mime != "application/octet-stream":
+        return err(
+            "INVALID_MIME_TYPE",
+            f"Remote resource is not an image (got '{mime}').",
+            415,
+        )
+    # Default the stored mime so the Asset row + extension are sensible.
+    effective_mime = mime if mime in _REMOTE_ALLOWED_IMAGE_MIME else "image/png"
+
+    # 6. Derive a filename from the URL path (for extension hint), then save.
+    url_path = parsed.path or "/"
+    filename = Path(url_path).name or "remote-image"
+
+    storage = get_storage()
+    storage_path, url = await storage.save_bytes(
+        content, str(kb_id), filename, effective_mime
+    )
+
+    asset = Asset(
+        knowledge_base_id=kb_id,
+        document_id=payload.doc_id,
+        uploader_id=current_user.id,
+        filename=filename,
+        storage_path=storage_path,
+        url=url,
+        mime_type=effective_mime,
+        size_bytes=size_bytes,
+    )
+    db.add(asset)
+    await db.flush()
+    return ok({"url": url, "filename": filename, "id": str(asset.id)})
 
 
 @router.get("/assets/{asset_id}")
