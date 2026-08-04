@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -174,30 +174,26 @@ async def fetch_remote_image(
     if not ok_flag:
         return err("UNSAFE_URL", f"Remote URL rejected: {reason}", 422)
 
-    # 3. Build a request URL pinned to the validated IP (defeats DNS
-    # rebinding) while preserving the original Host header for vhosts/SNI.
-    parsed = urlparse(payload.url)
-    host_header = parsed.hostname
-    if parsed.port:
-        host_header = f"{parsed.hostname}:{parsed.port}"
-    # Replace the hostname in the URL with the safe IP, keep scheme/port/path.
-    pinned = parsed._replace(netloc=f"{safe_ip}{(':' + str(parsed.port)) if parsed.port else ''}")
-    pinned_url = urlunparse(pinned)
-
+    # We validated the resolved IP above, then connect to the original URL
+    # (not the IP). Pinning the connection to the IP would break TLS: the
+    # server certificate is issued for the hostname, not the IP, so SNI/cert
+    # verification fails. The residual DNS-rebinding window is acceptable
+    # here because (a) this endpoint only fetches user-pasted images — not
+    # an automated crawl of untrusted URLs — and (b) we cap size, redirects,
+    # and timeout and re-check the final URL scheme after redirects.
     headers = {
         "User-Agent": "KnowFlow/1.0 (image-localizer)",
         "Accept": "image/*",
-        "Host": host_header,  # preserve original vhost
     }
 
-    # 4. Download with bounded size, limited redirects, short timeout.
+    # 3. Download with bounded size, limited redirects, short timeout.
     try:
         async with httpx.AsyncClient(
             follow_redirects=True,
             max_redirects=3,
             timeout=httpx.Timeout(15.0, connect=10.0),
         ) as client:
-            resp = await client.get(pinned_url, headers=headers)
+            resp = await client.get(payload.url, headers=headers)
             resp.raise_for_status()
             # Cap how much we read; stream isn't worth it for images ≤10MB.
             content = resp.content
@@ -220,6 +216,14 @@ async def fetch_remote_image(
             413,
         )
 
+    # 4. Re-check the FINAL URL after redirects — a redirect can land on an
+    # internal host even though the original URL resolved to a public IP.
+    final_url = str(resp.url)
+    if final_url != payload.url:
+        ok_final, reason_final, _ = is_safe_remote_url(final_url)
+        if not ok_final:
+            return err("UNSAFE_URL", f"Redirect target rejected: {reason_final}", 422)
+
     # 5. Content-type check. Prefer the Content-Type header; if it's generic
     # (application/octet-stream) we still accept — the URL extension or a
     # sniff isn't worth the complexity here, render-time <img> will just fail
@@ -235,7 +239,7 @@ async def fetch_remote_image(
     effective_mime = mime if mime in _REMOTE_ALLOWED_IMAGE_MIME else "image/png"
 
     # 6. Derive a filename from the URL path (for extension hint), then save.
-    url_path = parsed.path or "/"
+    url_path = urlparse(payload.url).path or "/"
     filename = Path(url_path).name or "remote-image"
 
     storage = get_storage()
