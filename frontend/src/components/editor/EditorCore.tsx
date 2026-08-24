@@ -26,7 +26,7 @@ import { markdownToHtml } from '../../utils/markdown'
 import { localizeRemoteImages, type FailedImage } from '../../utils/remoteImages'
 import { toast } from '@/components/ui/use-toast'
 import { saveDraft, clearDraft } from '@/utils/crashReport'
-import FailedImagesDialog from './FailedImagesDialog'
+import FailedImagesNotice from './FailedImagesNotice'
 
 // Shared turndown instance for HTML → Markdown conversion
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
@@ -284,7 +284,7 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       // Localize external image links before rendering: download each remote
       // image server-side (CORS blocks browser fetch) and rewrite the markdown
       // to point at the local copy. Failures keep the original URL.
-      const { md: localMd, failed, aborted, failures } = await localizeRemoteImages(
+      const { md: localMd, failed, failures } = await localizeRemoteImages(
         mdPrompt.text,
         kbId,
         docId,
@@ -305,11 +305,9 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       setMdPrompt(null)
 
       if (failed > 0) {
-        // A dialog rather than a toast: the list is actionable and can be long.
+        // An inline banner, not a modal: the document did render, and a dark
+        // overlay over it would suggest otherwise. Details on demand.
         setMdFailures(failures)
-        if (aborted) {
-          toast({ title: `已取消下载，${failed} 张图片保留原始外链` })
-        }
       }
     } catch (e) {
       // Insert the original markdown as-is rather than dropping the paste —
@@ -354,11 +352,7 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
 
   return (
     <div className="relative">
-      <FailedImagesDialog
-        images={mdFailures}
-        open={mdFailures.length > 0}
-        onClose={() => setMdFailures([])}
-      />
+      <FailedImagesNotice images={mdFailures} onDismiss={() => setMdFailures([])} />
       {/* Markdown paste prompt banner */}
       {mdPrompt && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">

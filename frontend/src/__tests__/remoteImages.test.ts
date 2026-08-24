@@ -157,6 +157,57 @@ describe('localizeRemoteImages', () => {
     expect(res.failed).toBe(0)
   })
 
+  it('appends a visible link to the original for each failed image', async () => {
+    fetchRemoteImage.mockRejectedValue({
+      response: { status: 422, data: { error: { code: 'UNSAFE_URL' } } },
+    })
+    const url = 'https://intranet.corp/pic.png'
+    const res = await localizeRemoteImages(`![图1](${url})`, KB)
+
+    // The image node stays (it renders wherever the URL is reachable) …
+    expect(res.md).toContain(`![图1](${url})`)
+    // … and the URL is also recoverable from the document as a link.
+    expect(res.md).toContain(`[原图链接：${url}](${url})`)
+  })
+
+  it('does not append a link for images that succeeded', async () => {
+    fetchRemoteImage.mockResolvedValue({ url: '/uploads/kb-1/ok.png' })
+    const res = await localizeRemoteImages('![a](https://example.com/a.png)', KB)
+    expect(res.md).not.toContain('原图链接')
+  })
+
+  it('renders the rest of the document when every image fails', async () => {
+    fetchRemoteImage.mockRejectedValue(new Error('down'))
+    const md = [
+      '# 标题',
+      '',
+      '正文段落。',
+      '',
+      '![图1](https://a.com/1.png)',
+      '',
+      '## 小节',
+      '',
+      '- 列表项',
+      '',
+      '| A | B |',
+      '| --- | --- |',
+      '| 1 | 2 |',
+      '',
+      '结尾段落。',
+    ].join('\n')
+
+    const res = await localizeRemoteImages(md, KB)
+
+    // Failure must be local to the image, never truncate the document.
+    expect(res.md).toContain('# 标题')
+    expect(res.md).toContain('正文段落。')
+    expect(res.md).toContain('## 小节')
+    expect(res.md).toContain('- 列表项')
+    expect(res.md).toContain('| A | B |')
+    expect(res.md).toContain('结尾段落。')
+    expect(res.failed).toBe(1)
+  })
+
   it('maps each URL to its own local file rather than pairing by position', async () => {
     // Regression: results were consumed via a positional cursor, so a mix of
     // local and remote images (or any dedupe) silently shifted the pairing and

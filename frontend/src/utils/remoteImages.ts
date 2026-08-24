@@ -166,7 +166,12 @@ export async function localizeRemoteImages(
       return `![${alt}](${local})`
     }
     failed++
-    return full
+    // Keep the image node (it renders wherever the URL is reachable) and append
+    // a visible link to the original so the URL is recoverable from the
+    // document itself — a broken <img> alone shows nothing the user can act on.
+    // Separate paragraph: an inline link next to an image is dropped when
+    // TipTap parses the image into a block node.
+    return `${full}\n\n[原图链接：${url}](${url})`
   })
 
   const failures: FailedImage[] = uniqueUrls
