@@ -24,6 +24,7 @@ import * as turndownPluginGfm from 'turndown-plugin-gfm'
 import { uploadImage } from '../../api/upload'
 import { markdownToHtml } from '../../utils/markdown'
 import { localizeRemoteImages } from '../../utils/remoteImages'
+import { toast } from '@/components/ui/use-toast'
 
 // Shared turndown instance for HTML → Markdown conversion
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
@@ -106,7 +107,15 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   const isFirstLoad = useRef(true)
   const [mdPrompt, setMdPrompt] = useState<{ text: string } | null>(null)
   const [mdLoading, setMdLoading] = useState(false)
+  const [mdProgress, setMdProgress] = useState<{ done: number; total: number } | null>(null)
+  // Lets the cancel button abort in-flight image downloads, and unmount abort
+  // them so orphaned assets aren't created for a document the user left.
+  const mdAbortRef = useRef<AbortController | null>(null)
   const [sourceContent, setSourceContent] = useState('')
+
+  useEffect(() => {
+    return () => mdAbortRef.current?.abort()
+  }, [])
 
   const handleImageUpload = async (file: File): Promise<string | null> => {
     if (!file.type.startsWith('image/')) return null
@@ -240,18 +249,55 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
 
   const handleMdConfirm = async () => {
     if (!mdPrompt || !editor) return
+    const controller = new AbortController()
+    mdAbortRef.current = controller
     setMdLoading(true)
+    setMdProgress(null)
     try {
       // Localize external image links before rendering: download each remote
       // image server-side (CORS blocks browser fetch) and rewrite the markdown
       // to point at the local copy. Failures fall back to the original URL.
-      const { md: localMd } = await localizeRemoteImages(mdPrompt.text, kbId, docId)
+      const { md: localMd, failed, aborted } = await localizeRemoteImages(mdPrompt.text, kbId, docId, {
+        signal: controller.signal,
+        onProgress: (done, total) => setMdProgress({ done, total }),
+      })
       const html = markdownToHtml(localMd, false)
+      // The editor can be torn down mid-download (user leaves edit mode or
+      // navigates to another doc); writing to a destroyed instance throws.
+      if (editor.isDestroyed) return
       editor.chain().focus().insertContent(html).run()
       setMdPrompt(null)
+      if (failed > 0) {
+        toast({
+          title: aborted
+            ? `已取消下载，${failed} 张图片保留原始外链`
+            : `${failed} 张图片下载失败，已保留原始外链`,
+          variant: 'destructive',
+        })
+      }
+    } catch (e) {
+      // Insert the original markdown as-is rather than dropping the paste —
+      // losing clipboard content the user can no longer recover is worse than
+      // an unrendered block.
+      console.error('[EditorCore] markdown paste failed', e)
+      if (editor.isDestroyed) return
+      editor.chain().focus().insertContent(mdPrompt.text).run()
+      setMdPrompt(null)
+      toast({ title: '渲染失败，已插入原始文本', variant: 'destructive' })
     } finally {
+      mdAbortRef.current = null
       setMdLoading(false)
+      setMdProgress(null)
     }
+  }
+
+  /** Abort in-flight downloads and keep the pasted text as-is. */
+  const handleMdCancel = () => {
+    if (mdLoading) {
+      mdAbortRef.current?.abort()
+      return
+    }
+    setMdPrompt(null)
   }
 
   const handleMdInsertPlain = () => {
@@ -276,7 +322,11 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
             </svg>
           )}
           <span className="flex-1 text-blue-700">
-            {mdLoading ? '正在下载外链图片并本地化…' : '检测到您粘贴的内容可能是 Markdown 格式，是否渲染为富文本？'}
+            {mdLoading
+              ? mdProgress && mdProgress.total > 0
+                ? `正在下载外链图片并本地化… (${mdProgress.done}/${mdProgress.total})`
+                : '正在下载外链图片并本地化…'
+              : '检测到您粘贴的内容可能是 Markdown 格式，是否渲染为富文本？'}
           </span>
           <button
             type="button"
@@ -294,11 +344,13 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
           >
             保留原始文本
           </button>
+          {/* Stays enabled while loading: cancels the downloads instead of
+              leaving the user with no way out of a slow batch. */}
           <button
             type="button"
-            onClick={() => setMdPrompt(null)}
-            disabled={mdLoading}
-            className="p-1 text-gray-400 hover:text-gray-600 transition disabled:opacity-50"
+            onClick={handleMdCancel}
+            title={mdLoading ? '取消下载' : '关闭'}
+            className="p-1 text-gray-400 hover:text-gray-600 transition"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

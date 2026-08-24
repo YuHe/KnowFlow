@@ -83,8 +83,18 @@ apiClient.interceptors.response.use(
       isRefreshing = true
 
       try {
-        // Refresh token is in HttpOnly cookie, send request without body
-        const response = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true })
+        // Refresh token is in HttpOnly cookie, send request without body.
+        // An explicit timeout is required: this is a bare axios call, so it
+        // does NOT inherit apiClient's timeout and would default to 0 (wait
+        // forever). Every request parked in failedQueue settles only once
+        // this resolves, so a hung refresh would strand them all — and any
+        // caller awaiting them (e.g. a batch of image downloads) never
+        // finishes, leaving its loading state stuck permanently.
+        const response = await axios.post(
+          '/api/v1/auth/refresh',
+          {},
+          { withCredentials: true, timeout: 15000 },
+        )
         const { access_token } = response.data.data || response.data
 
         tokenStorage.setAccessToken(access_token)

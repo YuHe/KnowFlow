@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import ipaddress
-import socket
 from typing import Optional
 from urllib.parse import urlparse
+
+# Cap how long a single hostname lookup may take. Without this, an
+# unresolvable or black-holed host can hold a resolver slot for the OS
+# default (often 20-30s), which stalls the whole fetch-remote batch.
+_DNS_TIMEOUT_S = 5.0
 
 
 class UnsafeRemoteURL(Exception):
@@ -27,11 +32,24 @@ def _ip_is_unsafe(ip: ipaddress._BaseAddress) -> bool:
     )
 
 
-def resolve_host_ips(host: str) -> list[ipaddress._BaseAddress]:
-    """Resolve a hostname to all its IPv4/IPv6 addresses."""
+async def resolve_host_ips(host: str) -> list[ipaddress._BaseAddress]:
+    """Resolve a hostname to all its IPv4/IPv6 addresses.
+
+    Goes through the event loop's resolver, which runs getaddrinfo in a thread
+    pool. Calling socket.getaddrinfo() directly from a coroutine would block
+    the event loop for the full DNS wait — seconds for an unresolvable host —
+    freezing every other request served by the same worker.
+    """
+    loop = asyncio.get_running_loop()
     try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror as exc:
+        infos = await asyncio.wait_for(
+            loop.getaddrinfo(host, None), timeout=_DNS_TIMEOUT_S
+        )
+    except asyncio.TimeoutError:
+        raise UnsafeRemoteURL(f"DNS lookup for '{host}' timed out")
+    except (OSError, UnicodeError) as exc:
+        # socket.gaierror is an OSError subclass; UnicodeError comes from IDNA
+        # encoding failures on malformed hostnames.
         raise UnsafeRemoteURL(f"Cannot resolve host '{host}': {exc}")
     ips: list[ipaddress._BaseAddress] = []
     for info in infos:
@@ -45,12 +63,13 @@ def resolve_host_ips(host: str) -> list[ipaddress._BaseAddress]:
     return ips
 
 
-def is_safe_remote_url(url: str) -> tuple[bool, str, Optional[str]]:
+async def is_safe_remote_url(url: str) -> tuple[bool, str, Optional[str]]:
     """Validate a remote URL for SSRF safety.
 
-    Returns (ok, reason, safe_ip). safe_ip is the first public IP we can pin
-    the connection to (used to defeat DNS rebinding — callers should connect
-    to this IP with the original Host header). It is None when ok is False.
+    Returns (ok, reason, safe_ip). safe_ip is the first public IP the URL
+    resolves to; it is None when ok is False. Callers connect to the original
+    URL rather than pinning to safe_ip (pinning breaks TLS certificate
+    verification) — see the note in routers/assets.py.
 
     Rules:
       - scheme must be http or https
@@ -78,7 +97,7 @@ def is_safe_remote_url(url: str) -> tuple[bool, str, Optional[str]]:
 
     # Hostname — resolve and check every address.
     try:
-        ips = resolve_host_ips(host)
+        ips = await resolve_host_ips(host)
     except UnsafeRemoteURL as exc:
         return False, str(exc), None
 
@@ -86,5 +105,7 @@ def is_safe_remote_url(url: str) -> tuple[bool, str, Optional[str]]:
         if _ip_is_unsafe(ip):
             return False, f"Host '{host}' resolves to unsafe IP {ip}", None
 
-    # Pick the first resolved IP to pin the connection against rebinding.
     return True, "ok", str(ips[0])
+
+
+__all__ = ["UnsafeRemoteURL", "is_safe_remote_url", "resolve_host_ips"]

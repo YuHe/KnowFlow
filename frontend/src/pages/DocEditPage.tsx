@@ -154,6 +154,7 @@ const DocEditPage: React.FC = () => {
               <EditorCore
                 content={initialContent}
                 kbId={kbId}
+                docId={docId !== 'new' ? docId : undefined}
                 onEditorReady={(ed) => setEditorInstance(ed)}
                 onUpdate={handleEditorUpdate}
                 editable={true}

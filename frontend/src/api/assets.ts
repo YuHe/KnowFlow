@@ -30,15 +30,22 @@ export const assetsApi = {
   /**
    * Download a remote image via the backend (browsers can't fetch cross-origin
    * image bytes due to CORS) and return its now-local URL. SSRF-guarded server-side.
+   *
+   * Uses a longer timeout than the client default: the backend allows up to
+   * ~20s per download, so the default 30s shared with ordinary API calls
+   * leaves little headroom once a request has waited in the browser's
+   * connection queue.
    */
   fetchRemoteImage: async (
     url: string,
     kb_id: string,
     doc_id?: string,
+    options?: { signal?: AbortSignal },
   ): Promise<{ url: string }> => {
     const response = await apiClient.post<ApiResponse<{ url: string; filename: string; id: string }>>(
       '/assets/fetch-remote',
       { url, kb_id, doc_id },
+      { timeout: 45000, signal: options?.signal },
     )
     return { url: response.data.data.url }
   },
