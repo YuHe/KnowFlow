@@ -56,6 +56,9 @@ services:
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-104857600}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8192,https://ku.ihope.cc}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      # WARNING keeps production logs small; set LOG_LEVEL=INFO in .env to
+      # trace per-request detail while diagnosing an issue.
+      LOG_LEVEL: ${LOG_LEVEL:-WARNING}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
