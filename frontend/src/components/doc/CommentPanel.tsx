@@ -11,9 +11,11 @@ interface CommentPanelProps {
   docId: string
   kbId: string
   onClose: () => void
+  /** Viewers can read comments but not post them (PRD.md §2.4). */
+  canComment?: boolean
 }
 
-export default function CommentPanel({ docId, onClose }: CommentPanelProps) {
+export default function CommentPanel({ docId, onClose, canComment = true }: CommentPanelProps) {
   const [comments, setComments] = useState<DocumentComment[]>([])
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
@@ -177,7 +179,8 @@ export default function CommentPanel({ docId, onClose }: CommentPanelProps) {
         )}
       </div>
 
-      {/* Input area */}
+      {/* Input area — hidden for viewers, who can read but not post */}
+      {canComment ? (
       <div className="border-t px-3 py-2 shrink-0 bg-gray-50">
         {replyTo && (
           <div className="flex items-center gap-1 mb-1.5 text-xs text-gray-500 bg-gray-100 rounded px-2 py-1">
@@ -213,6 +216,11 @@ export default function CommentPanel({ docId, onClose }: CommentPanelProps) {
           </button>
         </div>
       </div>
+      ) : (
+        <div className="border-t px-3 py-2.5 shrink-0 bg-gray-50 text-center text-xs text-gray-400">
+          您的角色为只读，无法发表评论
+        </div>
+      )}
     </div>
   )
 }

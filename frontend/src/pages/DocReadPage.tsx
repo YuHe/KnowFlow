@@ -427,7 +427,11 @@ const DocReadPage: React.FC = () => {
             </svg>
           </button>
 
-          <ExportMenu docId={currentDoc.id} kbId={kbId!} docTitle={currentDoc.title} />
+          {/* Export requires editor server-side; hide it from viewers rather
+              than letting them click into a 403. */}
+          {canEdit && (
+            <ExportMenu docId={currentDoc.id} kbId={kbId!} docTitle={currentDoc.title} />
+          )}
 
           <button
             onClick={() => setShowOutline((v) => !v)}
@@ -485,7 +489,7 @@ const DocReadPage: React.FC = () => {
 
       {/* Right Panels */}
       {activePanel === 'comments' && (
-        <CommentPanel docId={currentDoc.id} kbId={kbId!} onClose={() => setActivePanel(null)} />
+        <CommentPanel docId={currentDoc.id} kbId={kbId!} canComment={canEdit} onClose={() => setActivePanel(null)} />
       )}
       {activePanel === 'share' && (
         <SharePanel docId={currentDoc.id} kbId={kbId!} onClose={() => setActivePanel(null)} />

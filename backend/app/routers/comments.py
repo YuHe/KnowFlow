@@ -122,7 +122,9 @@ async def add_comment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    await _get_doc_and_check_membership(doc_id, current_user, db, "viewer")
+    # Viewers are read-only: they may read comments but not post them
+    # (see the permission matrix in PRD.md §2.4).
+    await _get_doc_and_check_membership(doc_id, current_user, db, "editor")
 
     if payload.parent_id:
         parent_r = await db.execute(

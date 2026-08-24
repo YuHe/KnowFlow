@@ -497,9 +497,14 @@ async def export_doc(
 ):
     doc = await _doc_or_404(doc_id, db)
 
+    # Export requires editor; viewers get read-only access in the UI but must
+    # not be able to pull the document out (see PRD.md §2.4). Public documents
+    # stay exportable by anyone who can read them.
     if current_user.role != "super_admin":
         role = await get_kb_member_role(db, doc.knowledge_base_id, current_user.id)
-        if role is None and not doc.is_public:
+        if not doc.is_public and (
+            role is None or ROLE_LEVELS.get(role, 0) < ROLE_LEVELS["editor"]
+        ):
             raise HTTPException(status_code=403, detail="Access denied")
 
     safe_title = doc.title.replace("/", "_").replace("\\", "_")
