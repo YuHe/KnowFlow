@@ -20,6 +20,9 @@ import ExportMenu from '@/components/doc/ExportMenu';
 import { ROLE_LEVELS } from '@/types';
 import { toast } from '@/components/ui/use-toast';
 import { useTreeStore } from '@/store/treeStore';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { debugLog, recentLogs } from '@/utils/debugLog';
+import { saveDraft, loadDraft, clearDraft } from '@/utils/crashReport';
 
 type PanelType = 'comments' | 'share' | 'versions' | null;
 
@@ -140,12 +143,29 @@ const DocReadPage: React.FC = () => {
   const handleEnterEdit = useCallback(() => {
     if (!currentDoc) return;
     setTitle(currentDoc.title || '');
-    const content = currentDoc.content_html
+    let content = currentDoc.content_html
       || (currentDoc.content_md ? markdownToHtml(currentDoc.content_md) : '');
+
+    // Offer any draft left behind by a crash or an interrupted paste. Stored
+    // content wins only if the user declines, so nothing is silently replaced.
+    const draft = docId ? loadDraft(docId) : null;
+    if (draft?.content) {
+      const when = new Date(draft.at).toLocaleString('zh-CN');
+      const label = draft.source === 'md-paste' ? '粘贴的 Markdown' : '崩溃前的编辑内容';
+      // eslint-disable-next-line no-alert
+      if (window.confirm(`检测到本地未保存的草稿（${label}，${when}）。\n\n是否恢复？取消则丢弃该草稿。`)) {
+        content = draft.source === 'md-paste' ? markdownToHtml(draft.content, false) : draft.content;
+        debugLog('draft', 'restored', { docId, source: draft.source, chars: draft.content.length });
+      } else {
+        clearDraft(docId!);
+        debugLog('draft', 'discarded by user', { docId });
+      }
+    }
+
     setInitialContent(content);
     lastSavedHtmlRef.current = currentDoc.content_html || '';
     setIsEditing(true);
-  }, [currentDoc]);
+  }, [currentDoc, docId]);
 
   const handleExitEdit = useCallback(async () => {
     setIsEditing(false);
@@ -157,11 +177,37 @@ const DocReadPage: React.FC = () => {
     if (kbId && docId) await fetchDoc(kbId, docId);
   }, [kbId, docId, fetchDoc]);
 
+  /**
+   * Guard against saving an empty editor over non-empty stored content.
+   *
+   * A crash or a mid-render teardown can leave the editor momentarily empty,
+   * and auto-save fires 2s later with whatever is on screen — silently wiping
+   * the document. Requires an explicit confirmation instead.
+   */
+  const isDestructiveSave = useCallback(
+    (html: string): boolean => {
+      const plain = htmlToMarkdown(html).trim();
+      if (plain.length > 0) return false;
+      const storedLen = (currentDoc?.content_md || '').trim().length;
+      return storedLen > 0;
+    },
+    [currentDoc],
+  );
+
   // Auto-save (no version snapshot)
   const handleAutoSave = useCallback(
     async (html: string) => {
       if (!docId || !kbId) return;
+      if (isDestructiveSave(html)) {
+        debugLog('autosave', 'BLOCKED empty-over-nonempty', {
+          docId,
+          storedMdChars: (currentDoc?.content_md || '').length,
+        });
+        console.warn('[AutoSave] refused to save empty content over existing content');
+        return;
+      }
       const md = htmlToMarkdown(html);
+      debugLog('autosave', 'saving', { docId, mdChars: md.length, htmlChars: html.length });
       await docsApi.updateDoc(docId, {
         title: titleRef.current,
         content_html: html,
@@ -171,7 +217,7 @@ const DocReadPage: React.FC = () => {
       });
       useTreeStore.getState().updateDoc(docId, { title: titleRef.current });
     },
-    [docId, kbId],
+    [docId, kbId, isDestructiveSave, currentDoc],
   );
 
   // Manual save (creates version snapshot)
@@ -180,6 +226,15 @@ const DocReadPage: React.FC = () => {
       if (!docId || !kbId) return;
       if (html === lastSavedHtmlRef.current) {
         toast({ title: '已是最新版本，无需重复保存' });
+        return;
+      }
+      if (isDestructiveSave(html)) {
+        // Manual save is explicit, so tell the user rather than failing quietly.
+        debugLog('manualsave', 'BLOCKED empty-over-nonempty', { docId });
+        toast({
+          title: '编辑器内容为空，已阻止覆盖原有内容',
+          variant: 'destructive',
+        });
         return;
       }
       const md = htmlToMarkdown(html);
@@ -193,7 +248,7 @@ const DocReadPage: React.FC = () => {
       lastSavedHtmlRef.current = html;
       useTreeStore.getState().updateDoc(docId, { title: titleRef.current });
     },
-    [docId, kbId],
+    [docId, kbId, isDestructiveSave],
   );
 
   const { saveStatus, triggerSave, triggerManualSave } = useAutoSave({
@@ -324,15 +379,38 @@ const DocReadPage: React.FC = () => {
                 className="w-full text-3xl font-bold border-none outline-none mb-6 placeholder:text-muted-foreground/30 bg-transparent text-gray-900 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
               {kbId && (
-                <EditorCore
-                  content={initialContent}
-                  kbId={kbId}
-                  docId={docId}
-                  onEditorReady={(ed) => { setEditorInstance(ed); editorInstanceRef.current = ed; }}
-                  onUpdate={handleEditorUpdate}
-                  editable={true}
-                  sourceMode={sourceMode}
-                />
+                <ErrorBoundary
+                  label="editor"
+                  onCapture={() => {
+                    // The editor's in-memory HTML is the only copy of anything
+                    // typed since the last save — get it into the report.
+                    const ed = editorInstanceRef.current;
+                    let html: string | undefined;
+                    try {
+                      html = ed && !ed.isDestroyed ? ed.getHTML() : undefined;
+                    } catch {
+                      html = undefined;
+                    }
+                    if (docId && html) saveDraft(docId, 'crash', html);
+                    return {
+                      docId,
+                      kbId,
+                      title: titleRef.current,
+                      editorHtml: html,
+                      recentLogs: recentLogs(),
+                    };
+                  }}
+                >
+                  <EditorCore
+                    content={initialContent}
+                    kbId={kbId}
+                    docId={docId}
+                    onEditorReady={(ed) => { setEditorInstance(ed); editorInstanceRef.current = ed; }}
+                    onUpdate={handleEditorUpdate}
+                    editable={true}
+                    sourceMode={sourceMode}
+                  />
+                </ErrorBoundary>
               )}
             </div>
           </div>

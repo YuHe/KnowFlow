@@ -25,6 +25,8 @@ import { uploadImage } from '../../api/upload'
 import { markdownToHtml } from '../../utils/markdown'
 import { localizeRemoteImages } from '../../utils/remoteImages'
 import { toast } from '@/components/ui/use-toast'
+import { debugLog } from '@/utils/debugLog'
+import { saveDraft, clearDraft } from '@/utils/crashReport'
 
 // Shared turndown instance for HTML → Markdown conversion
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
@@ -190,6 +192,7 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
         const textItem = event.clipboardData?.getData('text/plain') || ''
         if (textItem.length > 50 && looksLikeMarkdown(textItem)) {
           event.preventDefault()
+          debugLog('md-paste', 'markdown detected', { chars: textItem.length })
           setMdPrompt({ text: textItem })
           return true
         }
@@ -249,23 +252,59 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
 
   const handleMdConfirm = async () => {
     if (!mdPrompt || !editor) return
+
+    // Stash the raw paste before touching it. Everything below can throw, and
+    // until now a throw meant the clipboard content was gone for good.
+    const draftKey = docId || `kb-${kbId}`
+    saveDraft(draftKey, 'md-paste', mdPrompt.text)
+
     const controller = new AbortController()
     mdAbortRef.current = controller
     setMdLoading(true)
     setMdProgress(null)
+    debugLog('md-paste', 'confirm clicked', {
+      chars: mdPrompt.text.length,
+      docId,
+      kbId,
+      imgMatches: (mdPrompt.text.match(/!\[[^\]]*\]\([^)\s]+\)/g) || []).length,
+      fences: (mdPrompt.text.match(/^```(\w*)/gm) || []).join(','),
+    })
+
     try {
       // Localize external image links before rendering: download each remote
       // image server-side (CORS blocks browser fetch) and rewrite the markdown
       // to point at the local copy. Failures fall back to the original URL.
-      const { md: localMd, failed, aborted } = await localizeRemoteImages(mdPrompt.text, kbId, docId, {
-        signal: controller.signal,
-        onProgress: (done, total) => setMdProgress({ done, total }),
-      })
+      const { md: localMd, failed, aborted, downloaded } = await localizeRemoteImages(
+        mdPrompt.text,
+        kbId,
+        docId,
+        {
+          signal: controller.signal,
+          onProgress: (done, total) => {
+            debugLog('md-paste', `image progress ${done}/${total}`)
+            setMdProgress({ done, total })
+          },
+        },
+      )
+      debugLog('md-paste', 'localize done', { downloaded, failed, aborted, mdChars: localMd.length })
+
       const html = markdownToHtml(localMd, false)
+      debugLog('md-paste', 'markdown converted', { htmlChars: html.length })
+
       // The editor can be torn down mid-download (user leaves edit mode or
       // navigates to another doc); writing to a destroyed instance throws.
-      if (editor.isDestroyed) return
+      if (editor.isDestroyed) {
+        debugLog('md-paste', 'editor destroyed before insert — aborting')
+        return
+      }
+
       editor.chain().focus().insertContent(html).run()
+      debugLog('md-paste', 'insertContent ok', {
+        docChars: editor.getHTML().length,
+        isEmpty: editor.isEmpty,
+      })
+
+      clearDraft(draftKey)
       setMdPrompt(null)
       if (failed > 0) {
         toast({
@@ -278,12 +317,24 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
     } catch (e) {
       // Insert the original markdown as-is rather than dropping the paste —
       // losing clipboard content the user can no longer recover is worse than
-      // an unrendered block.
+      // an unrendered block. The draft stays in localStorage as a backstop.
+      debugLog('md-paste', 'FAILED', { error: String(e) })
       console.error('[EditorCore] markdown paste failed', e)
       if (editor.isDestroyed) return
-      editor.chain().focus().insertContent(mdPrompt.text).run()
-      setMdPrompt(null)
-      toast({ title: '渲染失败，已插入原始文本', variant: 'destructive' })
+      try {
+        editor.chain().focus().insertContent(mdPrompt.text).run()
+        setMdPrompt(null)
+        toast({ title: '渲染失败，已插入原始文本', variant: 'destructive' })
+      } catch (inner) {
+        // Even the plain-text fallback failed. Leave the banner up so the text
+        // stays on screen, and point the user at the saved draft.
+        debugLog('md-paste', 'plain-text fallback ALSO failed', { error: String(inner) })
+        console.error('[EditorCore] plain-text fallback failed', inner)
+        toast({
+          title: '插入失败，内容已备份到本地草稿',
+          variant: 'destructive',
+        })
+      }
     } finally {
       mdAbortRef.current = null
       setMdLoading(false)

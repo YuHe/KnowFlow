@@ -52,5 +52,10 @@ class Settings(BaseSettings):
     SUPER_ADMIN_USERNAME: str = "admin"
     SUPER_ADMIN_PASSWORD: str = "admin123"
 
+    # Logging. Application loggers ("knowflow.*") emit at this level. Default
+    # WARNING keeps production logs small; set LOG_LEVEL=INFO temporarily to
+    # trace request-level detail while diagnosing something.
+    LOG_LEVEL: str = "WARNING"
+
 
 settings = Settings()

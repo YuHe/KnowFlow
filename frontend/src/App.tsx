@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { KbLayout } from '@/components/layout/KbLayout'
 import { PageLoader } from '@/components/ui/spinner'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 // ── Eagerly loaded pages ──────────────────────────────────────────────────────
 import LoginPage from '@/pages/LoginPage'
@@ -77,8 +78,9 @@ export default function App() {
   }, [])
 
   return (
-    <BrowserRouter>
-      <Suspense fallback={<PageLoader />}>
+    <ErrorBoundary label="app">
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public-only routes (redirect if already logged in) */}
           <Route element={<PublicOnlyRoute />}>
@@ -124,7 +126,8 @@ export default function App() {
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </Suspense>
-    </BrowserRouter>
+        </Suspense>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

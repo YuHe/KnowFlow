@@ -1,4 +1,5 @@
 import { assetsApi } from '@/api/assets'
+import { debugLog } from '@/utils/debugLog'
 
 /**
  * Markdown image syntax: ![alt](url). Captures the URL in group 2.
@@ -98,7 +99,17 @@ export async function localizeRemoteImages(
       return localUrl
     } catch (e) {
       if (!signal?.aborted) {
-        console.warn('[localizeRemoteImages] failed to fetch', url, e)
+        // Surface the server's rejection reason — a bare axios error message
+        // ("Request failed with status code 422") says nothing about which URL
+        // was rejected or why.
+        const resp = (e as { response?: { status?: number; data?: unknown } })?.response
+        debugLog('md-paste', 'image fetch failed', {
+          url,
+          status: resp?.status,
+          body: resp?.data,
+          message: (e as Error)?.message,
+        })
+        console.warn('[localizeRemoteImages] failed to fetch', url, resp?.status, resp?.data ?? e)
       }
       throw e
     } finally {

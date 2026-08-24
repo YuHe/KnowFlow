@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -25,6 +26,8 @@ from app.utils.storage import get_storage
 from app.utils.url_guard import is_safe_remote_url
 
 router = APIRouter(tags=["assets"])
+
+logger = logging.getLogger("knowflow.assets")
 
 # Allowed MIME types
 ALLOWED_MIME_TYPES = {
@@ -225,11 +228,35 @@ async def fetch_remote_image(
     """
     kb_id = payload.kb_id
 
+    # Every rejection below is logged with the offending URL. Without this the
+    # only evidence of a failure was a bare status code in the access log, which
+    # says nothing about which URL was rejected or why.
+    def _reject(code: str, message: str, status: int):
+        logger.warning(
+            "fetch-remote rejected: %s (%d) url=%r kb=%s user=%s",
+            code,
+            status,
+            payload.url,
+            kb_id,
+            current_user.id,
+        )
+        return err(code, message, status)
+
+    logger.info(
+        "fetch-remote start url=%r kb=%s doc=%s user=%s",
+        payload.url,
+        kb_id,
+        payload.doc_id,
+        current_user.id,
+    )
+
     # 1. Permission: editor in the target KB (same gate as upload).
     if current_user.role != "super_admin":
         role = await get_kb_member_role(db, kb_id, current_user.id)
         if not role or ROLE_LEVELS.get(role, 0) < ROLE_LEVELS["editor"]:
-            return err("FORBIDDEN", "Editor permission required to fetch files.", 403)
+            return _reject(
+                "FORBIDDEN", "Editor permission required to fetch files.", 403
+            )
 
     # 2. Throttle: this endpoint fetches arbitrary URLs server-side, so cap how
     # fast one user can drive it. Checked after the permission gate so a
@@ -240,7 +267,7 @@ async def fetch_remote_image(
         _REMOTE_FETCH_WINDOW_S,
     )
     if not limit.allowed:
-        return err(
+        return _reject(
             "RATE_LIMITED",
             f"Too many image downloads. Retry in {limit.retry_after}s.",
             429,
@@ -256,7 +283,7 @@ async def fetch_remote_image(
     # 3. SSRF validation — returns (ok, reason, safe_ip).
     ok_flag, reason, safe_ip = await is_safe_remote_url(payload.url)
     if not ok_flag:
-        return err("UNSAFE_URL", f"Remote URL rejected: {reason}", 422)
+        return _reject("UNSAFE_URL", f"Remote URL rejected: {reason}", 422)
 
     # We validated the resolved IP above, then connect to the original URL
     # (not the IP). Pinning the connection to the IP would break TLS: the
@@ -277,36 +304,38 @@ async def fetch_remote_image(
             timeout=_REMOTE_TOTAL_DEADLINE_S,
         )
     except _RemoteImageTooLarge:
-        return err(
+        return _reject(
             "IMAGE_TOO_LARGE",
             f"Image exceeds max size of {settings.IMAGE_MAX_SIZE_MB} MB.",
             413,
         )
     except httpx.HTTPStatusError as exc:
-        return err(
+        return _reject(
             "REMOTE_FETCH_FAILED",
             f"Remote returned HTTP {exc.response.status_code}.",
             502,
         )
     except asyncio.TimeoutError:
-        return err(
+        return _reject(
             "REMOTE_FETCH_FAILED",
             f"Download exceeded the {_REMOTE_TOTAL_DEADLINE_S:.0f}s time limit.",
             504,
         )
     except (httpx.RequestError, httpx.HTTPError) as exc:
-        return err("REMOTE_FETCH_FAILED", f"Could not download image: {exc}", 502)
+        return _reject("REMOTE_FETCH_FAILED", f"Could not download image: {exc}", 502)
 
     size_bytes = len(content)
     if size_bytes == 0:
-        return err("REMOTE_FETCH_FAILED", "Remote returned an empty body.", 502)
+        return _reject("REMOTE_FETCH_FAILED", "Remote returned an empty body.", 502)
 
     # 5. Re-check the FINAL URL after redirects — a redirect can land on an
     # internal host even though the original URL resolved to a public IP.
     if final_url != payload.url:
         ok_final, reason_final, _ = await is_safe_remote_url(final_url)
         if not ok_final:
-            return err("UNSAFE_URL", f"Redirect target rejected: {reason_final}", 422)
+            return _reject(
+                "UNSAFE_URL", f"Redirect target rejected: {reason_final}", 422
+            )
 
     # 6. Content-type check. Prefer the Content-Type header; if it's generic
     # (application/octet-stream) we still accept — the URL extension or a
@@ -314,7 +343,7 @@ async def fetch_remote_image(
     # visibly if it's not actually an image.
     mime = (response_headers.get("content-type") or "application/octet-stream").split(";")[0].strip().lower()
     if mime not in _REMOTE_ALLOWED_IMAGE_MIME and mime != "application/octet-stream":
-        return err(
+        return _reject(
             "INVALID_MIME_TYPE",
             f"Remote resource is not an image (got '{mime}').",
             415,
@@ -343,6 +372,13 @@ async def fetch_remote_image(
     )
     db.add(asset)
     await db.flush()
+    logger.info(
+        "fetch-remote ok url=%r -> %s (%d bytes, %s)",
+        payload.url,
+        url,
+        size_bytes,
+        effective_mime,
+    )
     return ok({"url": url, "filename": filename, "id": str(asset.id)})
 
 

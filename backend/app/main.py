@@ -19,6 +19,17 @@ from app.database import close_redis
 
 logger = logging.getLogger("knowflow")
 
+# Attach a handler to the app's logger namespace. Without one, records fall
+# through to logging.lastResort, which drops anything below WARNING — so INFO
+# diagnostics were silently discarded no matter what level was requested.
+_log_handler = logging.StreamHandler(sys.stdout)
+_log_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+)
+logger.addHandler(_log_handler)
+logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.WARNING))
+logger.propagate = False
+
 # ---------------------------------------------------------------------------
 # Lifespan: run alembic upgrade + warm up connections
 # ---------------------------------------------------------------------------
