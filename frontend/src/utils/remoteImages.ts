@@ -1,5 +1,4 @@
 import { assetsApi } from '@/api/assets'
-import { debugLog } from '@/utils/debugLog'
 
 /**
  * Markdown image syntax: ![alt](url). Captures the URL in group 2.
@@ -57,29 +56,70 @@ export interface LocalizeOptions {
   onProgress?: (done: number, total: number) => void
 }
 
+export interface FailedImage {
+  url: string
+  reason: string
+}
+
+/**
+ * Turn an axios failure into something a user can act on. The bare message
+ * ("Request failed with status code 422") names neither the URL nor the cause.
+ */
+function describeFailure(e: unknown): string {
+  const err = e as {
+    response?: { status?: number; data?: { error?: { code?: string; message?: string } } }
+    code?: string
+    message?: string
+  }
+  const status = err?.response?.status
+  const serverCode = err?.response?.data?.error?.code
+  const serverMsg = err?.response?.data?.error?.message
+
+  if (serverCode === 'UNSAFE_URL') {
+    // Overwhelmingly this means the host is internal-only or does not resolve
+    // from the server — the common case being an intranet wiki link.
+    return '服务器无法访问该地址（域名解析失败或指向内网），已保留原链接'
+  }
+  if (serverCode === 'IMAGE_TOO_LARGE') return serverMsg || '图片超出大小上限'
+  if (serverCode === 'INVALID_MIME_TYPE') return serverMsg || '该地址返回的不是图片'
+  if (serverCode === 'RATE_LIMITED') return serverMsg || '下载过于频繁，请稍后重试'
+  if (serverCode === 'REMOTE_FETCH_FAILED') return serverMsg || '源站下载失败'
+  if (serverCode === 'FORBIDDEN') return '没有权限在该知识库中保存图片'
+
+  if (err?.code === 'ECONNABORTED') return '下载超时'
+  if (status) return `请求失败（HTTP ${status}）`
+  return err?.message || '未知错误'
+}
+
 /**
  * Scan a markdown string for external image URLs, download each one through
  * the backend (which bypasses CORS and is SSRF-guarded), and return the
  * markdown with every successful image replaced by its local /uploads/ URL.
  *
- * Images that fail to download are left as-is (still pointing at the remote
- * source) so the user sees a broken image rather than losing the link.
- * Downloads run concurrently up to MAX_CONCURRENT; one failure never blocks
- * the others. Identical URLs are fetched once and reused.
+ * Images that fail to download keep their original external URL, so the
+ * document still renders wherever that URL is reachable. `failures` carries the
+ * per-URL reason so the caller can report it.
  *
- * @returns { md, downloaded, failed, aborted } — counts for UI feedback.
+ * Downloads run concurrently up to MAX_CONCURRENT; one failure never blocks the
+ * others. Identical URLs are fetched once and reused.
  */
 export async function localizeRemoteImages(
   md: string,
   kbId: string,
   docId?: string,
   options: LocalizeOptions = {},
-): Promise<{ md: string; downloaded: number; failed: number; aborted: boolean }> {
+): Promise<{
+  md: string
+  downloaded: number
+  failed: number
+  aborted: boolean
+  failures: FailedImage[]
+}> {
   const { signal, onProgress } = options
   const matches = [...md.matchAll(MD_IMG_RE)]
   const remoteUrls = matches.map((m) => m[2]).filter(isRemoteLink)
   if (remoteUrls.length === 0) {
-    return { md, downloaded: 0, failed: 0, aborted: false }
+    return { md, downloaded: 0, failed: 0, aborted: false, failures: [] }
   }
 
   // Dedupe: an article that repeats a URL (banner, divider, logo) would
@@ -88,6 +128,7 @@ export async function localizeRemoteImages(
 
   let settled = 0
   const localUrls = new Map<string, string>()
+  const reasons = new Map<string, string>()
 
   const results = await mapLimit(uniqueUrls, MAX_CONCURRENT, async (url) => {
     if (signal?.aborted) throw new Error('aborted')
@@ -98,18 +139,10 @@ export async function localizeRemoteImages(
       localUrls.set(url, localUrl)
       return localUrl
     } catch (e) {
-      if (!signal?.aborted) {
-        // Surface the server's rejection reason — a bare axios error message
-        // ("Request failed with status code 422") says nothing about which URL
-        // was rejected or why.
-        const resp = (e as { response?: { status?: number; data?: unknown } })?.response
-        debugLog('md-paste', 'image fetch failed', {
-          url,
-          status: resp?.status,
-          body: resp?.data,
-          message: (e as Error)?.message,
-        })
-        console.warn('[localizeRemoteImages] failed to fetch', url, resp?.status, resp?.data ?? e)
+      if (signal?.aborted) {
+        reasons.set(url, '已取消下载')
+      } else {
+        reasons.set(url, describeFailure(e))
       }
       throw e
     } finally {
@@ -136,10 +169,15 @@ export async function localizeRemoteImages(
     return full
   })
 
+  const failures: FailedImage[] = uniqueUrls
+    .filter((u) => !localUrls.has(u))
+    .map((u) => ({ url: u, reason: reasons.get(u) || '未知错误' }))
+
   return {
     md: localized,
     downloaded,
     failed,
     aborted: Boolean(signal?.aborted) && failedUnique > 0,
+    failures,
   }
 }

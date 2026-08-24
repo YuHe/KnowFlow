@@ -619,6 +619,21 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
             </svg>
           </ToolbarButton>
           <ToolbarButton
+            onClick={() => editor.chain().focus().mergeOrSplit().run()}
+            disabled={!editor.can().mergeOrSplit()}
+            title="合并 / 拆分单元格（先拖选多个单元格）"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5h16M4 19h16M9 9l3 3-3 3m6-6l-3 3 3 3" />
+            </svg>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeaderRow().run()}
+            title="切换表头行"
+          >
+            <span className="text-xs font-medium">表头</span>
+          </ToolbarButton>
+          <ToolbarButton
             onClick={() => editor.chain().focus().deleteTable().run()}
             title="删除表格"
           >

@@ -23,10 +23,10 @@ import TurndownService from 'turndown'
 import * as turndownPluginGfm from 'turndown-plugin-gfm'
 import { uploadImage } from '../../api/upload'
 import { markdownToHtml } from '../../utils/markdown'
-import { localizeRemoteImages } from '../../utils/remoteImages'
+import { localizeRemoteImages, type FailedImage } from '../../utils/remoteImages'
 import { toast } from '@/components/ui/use-toast'
-import { debugLog } from '@/utils/debugLog'
 import { saveDraft, clearDraft } from '@/utils/crashReport'
+import FailedImagesDialog from './FailedImagesDialog'
 
 // Shared turndown instance for HTML → Markdown conversion
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
@@ -45,6 +45,22 @@ turndown.addRule('taskItem', {
     const checked = (node as HTMLElement).getAttribute('data-checked') === 'true'
     return `- [${checked ? 'x' : ' '}] ${content.trim()}\n`
   },
+})
+// Tables with merged cells have no GFM pipe-table equivalent — the GFM plugin
+// would silently drop every colspan/rowspan, so a merge could not survive a
+// single HTML→MD→HTML round trip (one happens on every save, since content_md
+// is stored alongside content_html, and on every source-mode toggle). Emit such
+// tables as raw HTML instead; marked passes HTML through and our sanitizer
+// keeps the colspan/rowspan attributes.
+turndown.addRule('tableWithMergedCells', {
+  filter: (node) =>
+    node.nodeName === 'TABLE' &&
+    Boolean(
+      (node as HTMLElement).querySelector(
+        'td[colspan]:not([colspan="1"]), td[rowspan]:not([rowspan="1"]), th[colspan]:not([colspan="1"]), th[rowspan]:not([rowspan="1"])',
+      ),
+    ),
+  replacement: (_content, node) => `\n\n${(node as HTMLElement).outerHTML}\n\n`,
 })
 
 /** Convert HTML to Markdown */
@@ -110,6 +126,8 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   const [mdPrompt, setMdPrompt] = useState<{ text: string } | null>(null)
   const [mdLoading, setMdLoading] = useState(false)
   const [mdProgress, setMdProgress] = useState<{ done: number; total: number } | null>(null)
+  // Images that could not be localized, reported in a dialog after insert.
+  const [mdFailures, setMdFailures] = useState<FailedImage[]>([])
   // Lets the cancel button abort in-flight image downloads, and unmount abort
   // them so orphaned assets aren't created for a document the user left.
   const mdAbortRef = useRef<AbortController | null>(null)
@@ -192,7 +210,6 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
         const textItem = event.clipboardData?.getData('text/plain') || ''
         if (textItem.length > 50 && looksLikeMarkdown(textItem)) {
           event.preventDefault()
-          debugLog('md-paste', 'markdown detected', { chars: textItem.length })
           setMdPrompt({ text: textItem })
           return true
         }
@@ -262,63 +279,42 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
     mdAbortRef.current = controller
     setMdLoading(true)
     setMdProgress(null)
-    debugLog('md-paste', 'confirm clicked', {
-      chars: mdPrompt.text.length,
-      docId,
-      kbId,
-      imgMatches: (mdPrompt.text.match(/!\[[^\]]*\]\([^)\s]+\)/g) || []).length,
-      fences: (mdPrompt.text.match(/^```(\w*)/gm) || []).join(','),
-    })
 
     try {
       // Localize external image links before rendering: download each remote
       // image server-side (CORS blocks browser fetch) and rewrite the markdown
-      // to point at the local copy. Failures fall back to the original URL.
-      const { md: localMd, failed, aborted, downloaded } = await localizeRemoteImages(
+      // to point at the local copy. Failures keep the original URL.
+      const { md: localMd, failed, aborted, failures } = await localizeRemoteImages(
         mdPrompt.text,
         kbId,
         docId,
         {
           signal: controller.signal,
-          onProgress: (done, total) => {
-            debugLog('md-paste', `image progress ${done}/${total}`)
-            setMdProgress({ done, total })
-          },
+          onProgress: (done, total) => setMdProgress({ done, total }),
         },
       )
-      debugLog('md-paste', 'localize done', { downloaded, failed, aborted, mdChars: localMd.length })
 
       const html = markdownToHtml(localMd, false)
-      debugLog('md-paste', 'markdown converted', { htmlChars: html.length })
 
       // The editor can be torn down mid-download (user leaves edit mode or
       // navigates to another doc); writing to a destroyed instance throws.
-      if (editor.isDestroyed) {
-        debugLog('md-paste', 'editor destroyed before insert — aborting')
-        return
-      }
+      if (editor.isDestroyed) return
 
       editor.chain().focus().insertContent(html).run()
-      debugLog('md-paste', 'insertContent ok', {
-        docChars: editor.getHTML().length,
-        isEmpty: editor.isEmpty,
-      })
-
       clearDraft(draftKey)
       setMdPrompt(null)
+
       if (failed > 0) {
-        toast({
-          title: aborted
-            ? `已取消下载，${failed} 张图片保留原始外链`
-            : `${failed} 张图片下载失败，已保留原始外链`,
-          variant: 'destructive',
-        })
+        // A dialog rather than a toast: the list is actionable and can be long.
+        setMdFailures(failures)
+        if (aborted) {
+          toast({ title: `已取消下载，${failed} 张图片保留原始外链` })
+        }
       }
     } catch (e) {
       // Insert the original markdown as-is rather than dropping the paste —
       // losing clipboard content the user can no longer recover is worse than
       // an unrendered block. The draft stays in localStorage as a backstop.
-      debugLog('md-paste', 'FAILED', { error: String(e) })
       console.error('[EditorCore] markdown paste failed', e)
       if (editor.isDestroyed) return
       try {
@@ -328,7 +324,6 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       } catch (inner) {
         // Even the plain-text fallback failed. Leave the banner up so the text
         // stays on screen, and point the user at the saved draft.
-        debugLog('md-paste', 'plain-text fallback ALSO failed', { error: String(inner) })
         console.error('[EditorCore] plain-text fallback failed', inner)
         toast({
           title: '插入失败，内容已备份到本地草稿',
@@ -359,6 +354,11 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
 
   return (
     <div className="relative">
+      <FailedImagesDialog
+        images={mdFailures}
+        open={mdFailures.length > 0}
+        onClose={() => setMdFailures([])}
+      />
       {/* Markdown paste prompt banner */}
       {mdPrompt && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">

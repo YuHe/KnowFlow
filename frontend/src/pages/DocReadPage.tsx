@@ -21,8 +21,7 @@ import { ROLE_LEVELS } from '@/types';
 import { toast } from '@/components/ui/use-toast';
 import { useTreeStore } from '@/store/treeStore';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { debugLog, recentLogs } from '@/utils/debugLog';
-import { saveDraft, loadDraft, clearDraft } from '@/utils/crashReport';
+import { saveDraft, loadDraft, clearDraft, type Draft } from '@/utils/crashReport';
 
 type PanelType = 'comments' | 'share' | 'versions' | null;
 
@@ -64,6 +63,8 @@ const DocReadPage: React.FC = () => {
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [zoom, setZoom] = useState(100);
   const [sourceMode, setSourceMode] = useState(false);
+  // A draft newer than the server's copy, offered for recovery on entering edit.
+  const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
   const titleRef = useRef(title);
   titleRef.current = title;
   // Track the HTML at the last manual-save point to detect duplicates
@@ -143,29 +144,49 @@ const DocReadPage: React.FC = () => {
   const handleEnterEdit = useCallback(() => {
     if (!currentDoc) return;
     setTitle(currentDoc.title || '');
-    let content = currentDoc.content_html
+    const content = currentDoc.content_html
       || (currentDoc.content_md ? markdownToHtml(currentDoc.content_md) : '');
+    setInitialContent(content);
+    lastSavedHtmlRef.current = currentDoc.content_html || '';
 
-    // Offer any draft left behind by a crash or an interrupted paste. Stored
-    // content wins only if the user declines, so nothing is silently replaced.
-    const draft = docId ? loadDraft(docId) : null;
-    if (draft?.content) {
-      const when = new Date(draft.at).toLocaleString('zh-CN');
-      const label = draft.source === 'md-paste' ? '粘贴的 Markdown' : '崩溃前的编辑内容';
-      // eslint-disable-next-line no-alert
-      if (window.confirm(`检测到本地未保存的草稿（${label}，${when}）。\n\n是否恢复？取消则丢弃该草稿。`)) {
-        content = draft.source === 'md-paste' ? markdownToHtml(draft.content, false) : draft.content;
-        debugLog('draft', 'restored', { docId, source: draft.source, chars: draft.content.length });
-      } else {
-        clearDraft(docId!);
-        debugLog('draft', 'discarded by user', { docId });
+    // Surface a draft only when it is genuinely newer than what the server
+    // holds — i.e. work that was lost. A draft older than the document was
+    // already superseded by a successful save, so it is stale and discarded
+    // silently. Presented as a dismissible banner rather than a modal: this is
+    // an offer, not a question the user must answer to start editing.
+    if (docId) {
+      const draft = loadDraft(docId);
+      if (draft?.content) {
+        const draftAt = new Date(draft.at).getTime();
+        const docAt = currentDoc.updated_at ? new Date(currentDoc.updated_at).getTime() : 0;
+        if (Number.isFinite(draftAt) && draftAt > docAt) {
+          setPendingDraft(draft);
+        } else {
+          clearDraft(docId);
+        }
       }
     }
 
-    setInitialContent(content);
-    lastSavedHtmlRef.current = currentDoc.content_html || '';
     setIsEditing(true);
   }, [currentDoc, docId]);
+
+  /** Apply the offered draft to the editor. */
+  const handleRestoreDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    const html =
+      pendingDraft.source === 'md-paste'
+        ? markdownToHtml(pendingDraft.content, false)
+        : pendingDraft.content;
+    const ed = editorInstanceRef.current;
+    if (ed && !ed.isDestroyed) ed.commands.setContent(html);
+    if (docId) clearDraft(docId);
+    setPendingDraft(null);
+  }, [pendingDraft, docId]);
+
+  const handleDiscardDraft = useCallback(() => {
+    if (docId) clearDraft(docId);
+    setPendingDraft(null);
+  }, [docId]);
 
   const handleExitEdit = useCallback(async () => {
     setIsEditing(false);
@@ -199,15 +220,10 @@ const DocReadPage: React.FC = () => {
     async (html: string) => {
       if (!docId || !kbId) return;
       if (isDestructiveSave(html)) {
-        debugLog('autosave', 'BLOCKED empty-over-nonempty', {
-          docId,
-          storedMdChars: (currentDoc?.content_md || '').length,
-        });
         console.warn('[AutoSave] refused to save empty content over existing content');
         return;
       }
       const md = htmlToMarkdown(html);
-      debugLog('autosave', 'saving', { docId, mdChars: md.length, htmlChars: html.length });
       await docsApi.updateDoc(docId, {
         title: titleRef.current,
         content_html: html,
@@ -217,7 +233,7 @@ const DocReadPage: React.FC = () => {
       });
       useTreeStore.getState().updateDoc(docId, { title: titleRef.current });
     },
-    [docId, kbId, isDestructiveSave, currentDoc],
+    [docId, kbId, isDestructiveSave],
   );
 
   // Manual save (creates version snapshot)
@@ -230,7 +246,6 @@ const DocReadPage: React.FC = () => {
       }
       if (isDestructiveSave(html)) {
         // Manual save is explicit, so tell the user rather than failing quietly.
-        debugLog('manualsave', 'BLOCKED empty-over-nonempty', { docId });
         toast({
           title: '编辑器内容为空，已阻止覆盖原有内容',
           variant: 'destructive',
@@ -370,6 +385,32 @@ const DocReadPage: React.FC = () => {
             style={{ maxWidth: 1100, zoom: zoom / 100 }}
           >
             <div className="px-16 py-12">
+              {pendingDraft && (
+                <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm">
+                  <svg className="w-4 h-4 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="flex-1 text-amber-800">
+                    有一份未保存的内容（
+                    {pendingDraft.source === 'md-paste' ? '粘贴的 Markdown' : '异常中断前的编辑'}，
+                    {new Date(pendingDraft.at).toLocaleString('zh-CN')}）
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRestoreDraft}
+                    className="rounded bg-amber-600 px-3 py-1 text-xs text-white transition hover:bg-amber-700"
+                  >
+                    恢复
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="rounded border border-amber-300 px-3 py-1 text-xs text-amber-700 transition hover:bg-amber-100"
+                  >
+                    丢弃
+                  </button>
+                </div>
+              )}
               <input
                 type="text"
                 value={title}
@@ -397,7 +438,6 @@ const DocReadPage: React.FC = () => {
                       kbId,
                       title: titleRef.current,
                       editorHtml: html,
-                      recentLogs: recentLogs(),
                     };
                   }}
                 >

@@ -111,6 +111,52 @@ describe('localizeRemoteImages', () => {
     expect(res.md).not.toContain('https://example.com/good-1.png')
   })
 
+  it('reports each failed URL with a human-readable reason', async () => {
+    // Mirrors the real backend envelope so the reason mapping is exercised.
+    fetchRemoteImage.mockImplementation(async (url: string) => {
+      if (url.includes('intranet')) {
+        throw {
+          response: {
+            status: 422,
+            data: { error: { code: 'UNSAFE_URL', message: 'Remote URL rejected: ...' } },
+          },
+        }
+      }
+      if (url.includes('huge')) {
+        throw {
+          response: {
+            status: 413,
+            data: { error: { code: 'IMAGE_TOO_LARGE', message: '图片超过 10 MB' } },
+          },
+        }
+      }
+      return { url: '/uploads/kb-1/ok.png' }
+    })
+
+    const md = [
+      '![a](https://ok.example.com/a.png)',
+      '![b](https://intranet.corp/b.png)',
+      '![c](https://cdn.example.com/huge.png)',
+    ].join('\n\n')
+
+    const res = await localizeRemoteImages(md, KB)
+
+    expect(res.failures).toHaveLength(2)
+    const byUrl = Object.fromEntries(res.failures.map((f) => [f.url, f.reason]))
+    expect(byUrl['https://intranet.corp/b.png']).toContain('内网')
+    expect(byUrl['https://cdn.example.com/huge.png']).toContain('10 MB')
+    // The failed images keep their original links so they still render on a
+    // network where those URLs resolve.
+    expect(res.md).toContain('https://intranet.corp/b.png')
+  })
+
+  it('returns no failures when everything succeeds', async () => {
+    fetchRemoteImage.mockResolvedValue({ url: '/uploads/kb-1/x.png' })
+    const res = await localizeRemoteImages('![a](https://example.com/a.png)', KB)
+    expect(res.failures).toEqual([])
+    expect(res.failed).toBe(0)
+  })
+
   it('maps each URL to its own local file rather than pairing by position', async () => {
     // Regression: results were consumed via a positional cursor, so a mix of
     // local and remote images (or any dedupe) silently shifted the pairing and
