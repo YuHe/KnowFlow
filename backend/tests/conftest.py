@@ -43,12 +43,14 @@ os.environ.setdefault("STORAGE_LOCAL_PATH", "/tmp/knowflow-test-uploads")
 async def _engine():
     """Create a fresh engine and schema for each test.
 
-    Function-scoped on purpose. A session-scoped async fixture needs a
-    session-scoped event loop, and the `event_loop` fixture override that used
-    to provide one was removed in pytest-asyncio 1.0 — leaving a session-scoped
-    engine bound to a closed loop, which failed every test at setup. Rebuilding
-    an in-memory SQLite schema per test costs microseconds and gives each test
-    genuine isolation instead of relying on a rollback that never ran.
+    Function-scoped on purpose. This fixture used to be session-scoped, so all
+    tests shared one in-memory database — and nothing reset it between them:
+    `async_db` rolls back, but fixtures like `test_user` commit first, and a
+    rollback after a commit is a no-op. `create_all`/`drop_all` ran once per
+    session. The second test to build a user therefore hit
+    `UNIQUE constraint failed: users.email`, which is what broke 84 of 89 tests
+    at setup. Rebuilding the schema per test costs ~0.3s across the suite and
+    gives real isolation.
     """
     from app.database import Base  # noqa: F401
     import app.models.user  # noqa: F401
@@ -58,8 +60,10 @@ async def _engine():
     kwargs = {"echo": False}
     if "sqlite" in TEST_DATABASE_URL:
         # StaticPool keeps the single in-memory connection alive across
-        # sessions; the default pool would give each connection its own
-        # empty database and lose the schema.
+        # sessions; with a per-connection pool each connection would get its
+        # own empty database and lose the schema (NullPool here yields
+        # "no such table: users"). This is already the default for a
+        # `:memory:` URL — stated explicitly because the fixtures depend on it.
         kwargs["connect_args"] = {"check_same_thread": False}
         kwargs["poolclass"] = StaticPool
 
