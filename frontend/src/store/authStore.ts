@@ -47,7 +47,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true })
         try {
           await authApi.logout()
+        } catch {
+          // Logging out is best-effort server-side: the call only clears the
+          // refresh cookie. Re-throwing would strand the caller — Header's
+          // handleLogout skips its navigate('/login') and leaks an unhandled
+          // rejection — even though the local session is already gone. Local
+          // state is cleared below either way, so swallow it.
         } finally {
+          tokenStorage.clearTokens()
           set({
             user: null,
             token: null,

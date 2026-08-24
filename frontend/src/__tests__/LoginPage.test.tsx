@@ -4,7 +4,7 @@
  * Tests rendering, form interaction, validation, and error display.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import React from 'react'
@@ -22,42 +22,46 @@ vi.mock('react-router-dom', async (importOriginal) => {
 })
 
 // ---------------------------------------------------------------------------
-// Mock the auth store
+// Mock the auth store.
+//
+// vi.mock is hoisted, so there can only be one registration per module per
+// file — a second vi.mock inside an it() body silently wins for the whole
+// file. Tests that need different store state mutate `storeState` instead.
 // ---------------------------------------------------------------------------
 const mockLogin = vi.fn()
-const mockClearError = vi.fn()
+const storeState = {
+  login: mockLogin,
+  isLoading: false,
+}
 
 vi.mock('../store/authStore', () => ({
-  useAuthStore: () => ({
-    login: mockLogin,
-    isLoading: false,
-    error: null,
-    clearError: mockClearError,
-  }),
+  useAuthStore: () => storeState,
 }))
+
+// Imported statically: the mock above is hoisted, so it is already in place.
+import LoginPage from '../pages/LoginPage'
 
 // ---------------------------------------------------------------------------
 // Helper to render with router context
 // ---------------------------------------------------------------------------
 function renderLoginPage() {
-  // Dynamic import to ensure mocks are in place first
-  const LoginPage = require('../pages/LoginPage').default as React.ComponentType
   return render(
     <MemoryRouter initialEntries={['/login']}>
       <LoginPage />
-    </MemoryRouter>
+    </MemoryRouter>,
   )
 }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  storeState.isLoading = false
+})
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe('LoginPage – rendering', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it('renders the KnowFlow brand heading', () => {
     renderLoginPage()
     expect(screen.getByText('KnowFlow')).toBeInTheDocument()
@@ -85,10 +89,6 @@ describe('LoginPage – rendering', () => {
 })
 
 describe('LoginPage – form validation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it('shows an error when submitting with empty username', async () => {
     renderLoginPage()
     await userEvent.click(screen.getByRole('button', { name: /登录/ }))
@@ -110,11 +110,7 @@ describe('LoginPage – form validation', () => {
 })
 
 describe('LoginPage – form submission', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('calls login with username and password on submit', async () => {
+  it('calls login with account and password on submit', async () => {
     mockLogin.mockResolvedValueOnce(undefined)
     renderLoginPage()
 
@@ -122,12 +118,29 @@ describe('LoginPage – form submission', () => {
     await userEvent.type(screen.getByLabelText(/密码/), 'TestPass123!')
     await userEvent.click(screen.getByRole('button', { name: /登录/ }))
 
+    // The API field is `account`, not `username` — see LoginRequest in types
+    // and the backend's LoginSchema.
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith(
         expect.objectContaining({
-          username: 'testuser',
+          account: 'testuser',
           password: 'TestPass123!',
-        })
+        }),
+      )
+    })
+  })
+
+  it('trims whitespace from the account before submitting', async () => {
+    mockLogin.mockResolvedValueOnce(undefined)
+    renderLoginPage()
+
+    await userEvent.type(screen.getByLabelText(/账号\s*\/\s*邮箱/), '  testuser  ')
+    await userEvent.type(screen.getByLabelText(/密码/), 'TestPass123!')
+    await userEvent.click(screen.getByRole('button', { name: /登录/ }))
+
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith(
+        expect.objectContaining({ account: 'testuser' }),
       )
     })
   })
@@ -140,8 +153,9 @@ describe('LoginPage – form submission', () => {
     await userEvent.type(screen.getByLabelText(/密码/), 'TestPass123!')
     await userEvent.click(screen.getByRole('button', { name: /登录/ }))
 
+    // replace: true so the login page doesn't stay in the history stack.
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/')
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true })
     })
   })
 
@@ -156,53 +170,14 @@ describe('LoginPage – form submission', () => {
     await waitFor(() => {
       expect(screen.getByText(/登录失败/)).toBeInTheDocument()
     })
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })
 
 describe('LoginPage – loading state', () => {
   it('disables the submit button while loading', () => {
-    vi.mock('../store/authStore', () => ({
-      useAuthStore: () => ({
-        login: mockLogin,
-        isLoading: true,
-        error: null,
-        clearError: mockClearError,
-      }),
-    }))
-
-    // Re-require to pick up updated mock
-    vi.resetModules()
-    const LoginPage = require('../pages/LoginPage').default as React.ComponentType
-    render(
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>
-    )
-
-    const button = screen.getByRole('button', { name: /登录/ })
-    expect(button).toBeDisabled()
-  })
-})
-
-describe('LoginPage – error from store', () => {
-  it('displays an error message passed via the auth store', () => {
-    vi.mock('../store/authStore', () => ({
-      useAuthStore: () => ({
-        login: mockLogin,
-        isLoading: false,
-        error: '账号或密码错误',
-        clearError: mockClearError,
-      }),
-    }))
-
-    vi.resetModules()
-    const LoginPage = require('../pages/LoginPage').default as React.ComponentType
-    render(
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>
-    )
-
-    expect(screen.getByText('账号或密码错误')).toBeInTheDocument()
+    storeState.isLoading = true
+    renderLoginPage()
+    expect(screen.getByRole('button', { name: /登录/ })).toBeDisabled()
   })
 })

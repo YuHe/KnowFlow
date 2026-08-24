@@ -97,6 +97,9 @@ const createAuthStore = () =>
       set({ isLoading: true })
       try {
         await mockApiPost('/auth/logout')
+      } catch {
+        // Mirrors the real store: logging out is best-effort server-side, so a
+        // failed call must not reject — callers navigate to /login afterwards.
       } finally {
         set({ user: null, accessToken: null, isLoading: false, error: null })
       }
@@ -203,11 +206,14 @@ describe('Auth store – logout', () => {
   it('clears state even if logout API call fails', async () => {
     mockApiPost.mockRejectedValueOnce(new Error('Network error'))
 
-    await useAuthStore.getState().logout()
+    // Must resolve, not reject: Header.handleLogout awaits this and then
+    // navigates to /login, which it would skip on a rejection.
+    await expect(useAuthStore.getState().logout()).resolves.toBeUndefined()
 
     const state = useAuthStore.getState()
     expect(state.user).toBeNull()
     expect(state.accessToken).toBeNull()
+    expect(state.isLoading).toBe(false)
   })
 })
 

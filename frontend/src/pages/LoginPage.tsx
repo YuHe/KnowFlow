@@ -7,8 +7,6 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isLoading } = useAuthStore();
-  const clearError = () => {};
-  const error = '';
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +16,6 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    clearError?.();
 
     if (!username.trim()) {
       setFormError('请输入账号或邮箱');
@@ -38,7 +35,7 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  const displayError = formError || error;
+  const displayError = formError;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
