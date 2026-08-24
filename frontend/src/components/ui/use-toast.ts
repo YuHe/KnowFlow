@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useReducer, useCallback } from 'react'
+import { useCallback } from 'react'
 import type { ToastActionElement, ToastProps, ToastVariant } from './toast'
 
 const TOAST_LIMIT = 5
@@ -88,7 +88,11 @@ const listeners: Array<(state: State) => void> = []
 let memoryState: State = { toasts: [] }
 
 function dispatch(action: Action) {
-  memoryState = reducer(memoryState, action)
+  const next = reducer(memoryState, action)
+  // Defensive: an unhandled action type would otherwise poison the store for
+  // every consumer, which is exactly the failure this module already had once.
+  if (!next || !Array.isArray(next.toasts)) return
+  memoryState = next
   listeners.forEach((listener) => listener(memoryState))
 }
 
@@ -116,17 +120,23 @@ function toast({ ...props }: Toast) {
 }
 
 function useToast() {
-  const [state, setState] = useReducer(reducer, memoryState)
-
-  const stateRef = React.useRef(state)
-  stateRef.current = state
+  // Plain useState, not useReducer. The store below is module-level and is
+  // already reduced by dispatch(); a component only needs to mirror it.
+  //
+  // This previously used `useReducer(reducer, memoryState)` and pushed the
+  // resulting dispatch into `listeners`. Since dispatch() notifies listeners
+  // with `listener(memoryState)`, React received a *state* object where it
+  // expected an *action*: reducer(state, memoryState) matched no `case`,
+  // returned undefined, and every consumer's `toasts` became undefined —
+  // crashing Toaster on `toasts.map` the first time any toast fired.
+  const [state, setState] = React.useState<State>(memoryState)
 
   React.useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    listeners.push(setState as any)
+    listeners.push(setState)
+    // Sync once on mount: a toast may have fired between module init and here.
+    setState(memoryState)
     return () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const index = listeners.indexOf(setState as any)
+      const index = listeners.indexOf(setState)
       if (index > -1) listeners.splice(index, 1)
     }
   }, [])
