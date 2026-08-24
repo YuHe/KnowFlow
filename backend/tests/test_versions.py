@@ -208,12 +208,13 @@ class TestDocumentVersions:
         if len(versions) < 2:
             pytest.skip("Need at least 2 versions to compare")
 
-        v1_id = versions[-1]["id"]
-        v2_id = versions[0]["id"]
+        v1_num = versions[-1]["version_num"]
+        v2_num = versions[0]["version_num"]
 
+        # The endpoint compares by version_num (an int), not by version id.
         resp = await async_client.get(
             f"/api/v1/docs/{doc['id']}/versions/compare"
-            f"?v1={v1_id}&v2={v2_id}",
+            f"?v1={v1_num}&v2={v2_num}",
             headers=headers,
         )
         assert resp.status_code == 200, resp.text
@@ -255,5 +256,6 @@ class TestDocumentVersions:
         new_versions = versions_after.json()["data"]
         assert len(new_versions) > count_before, "Restore should create a new version entry"
 
-        # The newest version should have reason 'restore'
-        assert new_versions[0]["snapshot_reason"] == "restore"
+        # The newest version snapshots the content as it was BEFORE the
+        # restore, so it is tagged 'pre_restore' rather than 'restore'.
+        assert new_versions[0]["snapshot_reason"] == "pre_restore"

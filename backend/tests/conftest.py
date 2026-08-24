@@ -6,7 +6,6 @@ Requires: pip install aiosqlite pytest-asyncio httpx
 """
 from __future__ import annotations
 
-import asyncio
 import os
 import uuid
 from collections.abc import AsyncGenerator
@@ -19,6 +18,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool
 
 # ---------------------------------------------------------------------------
 # Test database URL – default to in-memory SQLite
@@ -29,37 +29,41 @@ TEST_DATABASE_URL = os.getenv(
 
 os.environ.setdefault("TEST_DATABASE_URL", TEST_DATABASE_URL)
 
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Session-scoped event loop (required for session-scoped async fixtures)."""
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
-    yield loop
-    loop.close()
+# Storage writes must land somewhere writable. app.config defaults
+# STORAGE_LOCAL_PATH to /app/uploads, which only exists inside the container,
+# so importing the app would fail on a dev machine.
+os.environ.setdefault("STORAGE_LOCAL_PATH", "/tmp/knowflow-test-uploads")
 
 
 # ---------------------------------------------------------------------------
 # Async engine / session
 # ---------------------------------------------------------------------------
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def _engine():
-    """Create the test engine and initialise the schema once per session."""
+    """Create a fresh engine and schema for each test.
+
+    Function-scoped on purpose. A session-scoped async fixture needs a
+    session-scoped event loop, and the `event_loop` fixture override that used
+    to provide one was removed in pytest-asyncio 1.0 — leaving a session-scoped
+    engine bound to a closed loop, which failed every test at setup. Rebuilding
+    an in-memory SQLite schema per test costs microseconds and gives each test
+    genuine isolation instead of relying on a rollback that never ran.
+    """
     from app.database import Base  # noqa: F401
     import app.models.user  # noqa: F401
     import app.models.knowledge_base  # noqa: F401
     import app.models.document  # noqa: F401
 
-    connect_args = {}
+    kwargs = {"echo": False}
     if "sqlite" in TEST_DATABASE_URL:
-        connect_args = {"check_same_thread": False}
+        # StaticPool keeps the single in-memory connection alive across
+        # sessions; the default pool would give each connection its own
+        # empty database and lose the schema.
+        kwargs["connect_args"] = {"check_same_thread": False}
+        kwargs["poolclass"] = StaticPool
 
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
-        echo=False,
-        connect_args=connect_args,
-    )
+    engine = create_async_engine(TEST_DATABASE_URL, **kwargs)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -72,7 +76,7 @@ async def _engine():
 
 @pytest_asyncio.fixture
 async def async_db(_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Function-scoped DB session that rolls back after each test."""
+    """Function-scoped DB session. Isolation comes from the per-test engine."""
     TestSession = async_sessionmaker(
         bind=_engine,
         class_=AsyncSession,

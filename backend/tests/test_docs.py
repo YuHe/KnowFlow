@@ -253,7 +253,7 @@ class TestDocumentExport:
             content_md="# Export\nHello World",
         )
         resp = await async_client.get(
-            f"/api/v1/docs/{doc['id']}/export/md",
+            f"/api/v1/docs/{doc['id']}/export?format=md",
             headers=headers,
         )
         assert resp.status_code == 200, resp.text
@@ -273,7 +273,7 @@ class TestDocumentExport:
             content_md="# Export\nHello World",
         )
         resp = await async_client.get(
-            f"/api/v1/docs/{doc['id']}/export/docx",
+            f"/api/v1/docs/{doc['id']}/export?format=docx",
             headers=headers,
         )
         assert resp.status_code == 200, resp.text

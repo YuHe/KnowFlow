@@ -113,8 +113,17 @@ class TestViewerPermissions:
         assert resp.status_code == 403, resp.text
 
     async def test_viewer_cannot_restore_version(self):
+        # A real version id is needed: the path param is a UUID, so passing a
+        # version_num gets rejected at validation before the role check runs.
+        versions_resp = await self.async_client.get(
+            f"/api/v1/docs/{self.owner_doc['id']}/versions",
+            headers=self.owner_headers,
+        )
+        versions = versions_resp.json()["data"]
+        ver_id = versions[0]["id"] if versions else uuid.uuid4()
+
         resp = await self.async_client.post(
-            f"/api/v1/docs/{self.owner_doc['id']}/versions/1/restore",
+            f"/api/v1/docs/{self.owner_doc['id']}/versions/{ver_id}/restore",
             headers=self.viewer_headers,
         )
         assert resp.status_code in (403, 404), resp.text
@@ -122,7 +131,7 @@ class TestViewerPermissions:
     async def test_viewer_cannot_export_doc(self):
         """Viewers should not be able to export documents."""
         resp = await self.async_client.get(
-            f"/api/v1/docs/{self.owner_doc['id']}/export/md",
+            f"/api/v1/docs/{self.owner_doc['id']}/export?format=md",
             headers=self.viewer_headers,
         )
         assert resp.status_code == 403, resp.text
@@ -237,7 +246,7 @@ class TestEditorPermissions:
 
     async def test_editor_can_export_doc(self):
         resp = await self.async_client.get(
-            f"/api/v1/docs/{self.editor_doc['id']}/export/md",
+            f"/api/v1/docs/{self.editor_doc['id']}/export?format=md",
             headers=self.editor_headers,
         )
         assert resp.status_code == 200, resp.text
@@ -404,7 +413,7 @@ class TestOwnerPermissions:
     async def test_owner_can_delete_kb(self):
         """Owner is permitted to delete the KB (uses a separate temporary KB)."""
         create_resp = await self.async_client.post(
-            "/api/v1/kb/",
+            "/api/v1/kb",
             json={"name": "Owner Delete KB", "visibility": "private"},
             headers=self.owner_headers,
         )

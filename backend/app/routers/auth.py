@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -149,7 +150,16 @@ async def refresh_token(
     if not user_id:
         return err("INVALID_REFRESH_TOKEN", "Invalid token subject.", 401)
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    # Coerce to UUID before querying, matching get_current_user in utils/auth.
+    # Comparing User.id against a raw str only works because asyncpg accepts
+    # str for a native uuid column; on any character-based backend SQLAlchemy's
+    # bind processor calls .hex on it and raises AttributeError.
+    try:
+        uid = uuid.UUID(str(user_id))
+    except (ValueError, AttributeError):
+        return err("INVALID_REFRESH_TOKEN", "Invalid token subject.", 401)
+
+    result = await db.execute(select(User).where(User.id == uid))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         return err("USER_NOT_FOUND", "User not found or disabled.", 401)
