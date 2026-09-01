@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../api/client';
 import KbIcon from '@/components/kb/KbIcon';
-import { sanitizeHtml } from '@/utils/sanitize';
+import DocViewer from '@/components/doc/DocViewer';
 import { markdownToHtml } from '@/utils/markdown';
-import { renderMermaidBlocks } from '@/utils/mermaid';
 
 interface PublicKbData {
   id: string;
@@ -68,12 +67,6 @@ const PublicKbPage: React.FC = () => {
   };
 
   const contentRef = useRef<HTMLDivElement>(null);
-  // Render mermaid diagrams when the selected doc changes.
-  useEffect(() => {
-    if (contentRef.current) {
-      renderMermaidBlocks(contentRef.current);
-    }
-  }, [selectedDoc]);
 
   if (loading) {
     return (
@@ -139,14 +132,12 @@ const PublicKbPage: React.FC = () => {
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
           {selectedDoc ? (
-            <div className="max-w-3xl mx-auto px-8 py-10">
+            <div className="max-w-3xl mx-auto px-8 py-10" ref={contentRef}>
               <h1 className="text-3xl font-bold text-gray-900 mb-4">{selectedDoc.title || '无标题'}</h1>
               <hr className="border-gray-200 mb-6" />
-              <div
-                ref={contentRef}
-                className="prose prose-gray max-w-none doc-content"
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedDoc.content_html) }}
-              />
+              {/* Shared with the authenticated read view so mermaid rendering,
+                  heading anchors and code-block copy buttons stay identical. */}
+              <DocViewer content={selectedDoc.content_html} containerRef={contentRef} />
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">

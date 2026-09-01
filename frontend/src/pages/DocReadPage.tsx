@@ -7,7 +7,7 @@ import { useKbStore } from '@/store/kbStore';
 import { favoritesApi } from '@/api/favorites';
 import { docsApi } from '@/api/docs';
 import { assetsApi } from '@/api/assets';
-import { htmlToMarkdown } from '@/components/editor/EditorCore';
+import { htmlToMarkdown, documentMarkdown } from '@/components/editor/EditorCore';
 import EditorCore from '@/components/editor/EditorCore';
 import EditorToolbar from '@/components/editor/EditorToolbar';
 import { useAutoSave } from '@/hooks/useAutoSave';
@@ -19,6 +19,7 @@ import VersionList from '@/components/doc/VersionList';
 import ExportMenu from '@/components/doc/ExportMenu';
 import { ROLE_LEVELS } from '@/types';
 import { toast } from '@/components/ui/use-toast';
+import { copyToClipboard } from '@/utils';
 import { useTreeStore } from '@/store/treeStore';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { saveDraft, loadDraft, clearDraft, type Draft } from '@/utils/crashReport';
@@ -54,6 +55,9 @@ const DocReadPage: React.FC = () => {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [showOutline, setShowOutline] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
+  // Guards the copy-markdown button against re-entry while the clipboard write
+  // is in flight (the HTML→MD fallback can be slow on a large document).
+  const [copyingMd, setCopyingMd] = useState(false);
 
   // ── Edit-mode state ────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
@@ -305,6 +309,29 @@ const DocReadPage: React.FC = () => {
     setActivePanel((prev) => (prev === panel ? null : panel));
   };
 
+  /**
+   * Copy the whole document as Markdown.
+   */
+  const handleCopyMarkdown = async () => {
+    if (!currentDoc) return;
+    const md = documentMarkdown(currentDoc);
+    if (!md) {
+      toast({ title: '文档内容为空，没有可复制的源码' });
+      return;
+    }
+    setCopyingMd(true);
+    try {
+      await copyToClipboard(md);
+      toast({ title: 'Markdown 源码已复制' });
+    } catch {
+      // Clipboard access is blocked on insecure origins and by some policies —
+      // say so rather than leaving the button looking like it worked.
+      toast({ title: '复制失败，请检查浏览器剪贴板权限', variant: 'destructive' });
+    } finally {
+      setCopyingMd(false);
+    }
+  };
+
   const canEdit = (ROLE_LEVELS[currentKb?.my_role ?? ''] ?? 0) >= ROLE_LEVELS['editor'];
 
   // Back navigation: go to previous history entry if available,
@@ -542,6 +569,20 @@ const DocReadPage: React.FC = () => {
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
+          {/* Copy the document's Markdown source. Read-only and purely
+              client-side, so it is offered to viewers as well. */}
+          <button
+            onClick={handleCopyMarkdown}
+            disabled={copyingMd}
+            className="p-1.5 rounded-lg transition hover:bg-gray-100 text-gray-400 disabled:opacity-50"
+            title="复制 Markdown 源码"
+            aria-label="复制 Markdown 源码"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </button>
 

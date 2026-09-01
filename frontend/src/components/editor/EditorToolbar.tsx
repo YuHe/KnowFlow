@@ -83,6 +83,18 @@ const HIGHLIGHT_COLORS = [
   { label: '青色', value: '#a5f3fc' },
 ]
 
+// Presets for the row-height menu. Dragging a row's bottom border does the same
+// thing continuously; this is the keyboard-reachable path and the way to apply
+// one height to several rows at once (select cells across them first).
+const ROW_HEIGHT_OPTIONS: { label: string; value: number | null }[] = [
+  { label: '自适应', value: null },
+  { label: '紧凑 (28px)', value: 28 },
+  { label: '标准 (36px)', value: 36 },
+  { label: '宽松 (48px)', value: 48 },
+  { label: '很宽松 (64px)', value: 64 },
+  { label: '超宽 (96px)', value: 96 },
+]
+
 export default function EditorToolbar({ editor, zoom = 100, onZoomChange, sourceMode = false, onSourceModeChange, onFileUpload }: EditorToolbarProps) {
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
@@ -90,16 +102,18 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const [showHighlightPicker, setShowHighlightPicker] = useState(false)
   const [showHeading, setShowHeading] = useState(false)
   const [showImageMenu, setShowImageMenu] = useState(false)
+  const [showRowHeight, setShowRowHeight] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const colorPickerRef = useRef<HTMLDivElement>(null)
   const highlightPickerRef = useRef<HTMLDivElement>(null)
   const headingRef = useRef<HTMLDivElement>(null)
   const imageMenuRef = useRef<HTMLDivElement>(null)
+  const rowHeightRef = useRef<HTMLDivElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu) return
+    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight) return
     const handle = (e: MouseEvent) => {
       if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setShowColorPicker(false)
@@ -113,10 +127,13 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
       if (showImageMenu && imageMenuRef.current && !imageMenuRef.current.contains(e.target as Node)) {
         setShowImageMenu(false)
       }
+      if (showRowHeight && rowHeightRef.current && !rowHeightRef.current.contains(e.target as Node)) {
+        setShowRowHeight(false)
+      }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu])
+  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight])
 
   if (!editor) return null
 
@@ -633,6 +650,42 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
           >
             <span className="text-xs font-medium">表头</span>
           </ToolbarButton>
+
+          {/* Row height — presets; the same value can also be set by dragging a
+              row's bottom border in the editor. */}
+          <div className="relative" ref={rowHeightRef}>
+            <button
+              type="button"
+              onClick={() => setShowRowHeight((v) => !v)}
+              title="行高（也可拖拽行的下边框调整）"
+              className={`h-7 px-1.5 flex items-center gap-1 rounded text-xs transition ${
+                showRowHeight ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7l4-4 4 4M8 17l4 4 4-4M4 12h16" />
+              </svg>
+              行高
+            </button>
+            {showRowHeight && (
+              <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-36 py-1">
+                {ROW_HEIGHT_OPTIONS.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => {
+                      editor.chain().focus().setTableRowHeight(option.value).run()
+                      setShowRowHeight(false)
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <ToolbarButton
             onClick={() => editor.chain().focus().deleteTable().run()}
             title="删除表格"

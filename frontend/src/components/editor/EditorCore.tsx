@@ -6,7 +6,7 @@ import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import { ResizableImage } from './ResizableImage'
 import Table from '@tiptap/extension-table'
-import TableRow from '@tiptap/extension-table-row'
+import { ResizableTableRow } from './TableRowHeight'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
@@ -46,26 +46,47 @@ turndown.addRule('taskItem', {
     return `- [${checked ? 'x' : ' '}] ${content.trim()}\n`
   },
 })
-// Tables with merged cells have no GFM pipe-table equivalent — the GFM plugin
-// would silently drop every colspan/rowspan, so a merge could not survive a
-// single HTML→MD→HTML round trip (one happens on every save, since content_md
-// is stored alongside content_html, and on every source-mode toggle). Emit such
-// tables as raw HTML instead; marked passes HTML through and our sanitizer
-// keeps the colspan/rowspan attributes.
-turndown.addRule('tableWithMergedCells', {
-  filter: (node) =>
-    node.nodeName === 'TABLE' &&
-    Boolean(
-      (node as HTMLElement).querySelector(
-        'td[colspan]:not([colspan="1"]), td[rowspan]:not([rowspan="1"]), th[colspan]:not([colspan="1"]), th[rowspan]:not([rowspan="1"])',
-      ),
-    ),
+// Tables with merged cells or explicit row heights have no GFM pipe-table
+// equivalent — the GFM plugin would silently drop every colspan/rowspan and
+// every row height, so neither could survive a single HTML→MD→HTML round trip
+// (one happens on every save, since content_md is stored alongside
+// content_html, and on every source-mode toggle). Emit such tables as raw HTML
+// instead; marked passes HTML through and our sanitizer keeps the
+// colspan/rowspan attributes and the inline height style.
+const MERGED_CELL_SELECTOR =
+  'td[colspan]:not([colspan="1"]), td[rowspan]:not([rowspan="1"]), th[colspan]:not([colspan="1"]), th[rowspan]:not([rowspan="1"])'
+
+function tableNeedsRawHtml(table: HTMLElement): boolean {
+  if (table.querySelector(MERGED_CELL_SELECTOR)) return true
+  return Array.from(table.querySelectorAll('tr')).some(
+    (row) => Boolean((row as HTMLElement).style?.height),
+  )
+}
+
+turndown.addRule('tableNeedsRawHtml', {
+  filter: (node) => node.nodeName === 'TABLE' && tableNeedsRawHtml(node as HTMLElement),
   replacement: (_content, node) => `\n\n${(node as HTMLElement).outerHTML}\n\n`,
 })
 
 /** Convert HTML to Markdown */
 export function htmlToMarkdown(html: string): string {
   return turndown.turndown(html)
+}
+
+/**
+ * The Markdown source of a stored document.
+ *
+ * content_md is what an export would hand back, so it wins. Documents saved
+ * before content_md was persisted — and any whose markdown column ended up
+ * empty — fall back to converting the stored HTML.
+ */
+export function documentMarkdown(doc: {
+  content_md?: string | null
+  content_html?: string | null
+}): string {
+  const stored = (doc.content_md || '').trim()
+  if (stored) return stored
+  return htmlToMarkdown(doc.content_html || '').trim()
 }
 
 // Extend TextStyle to also support fontSize attribute
@@ -161,7 +182,7 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
         HTMLAttributes: { class: 'max-w-full rounded-lg my-2' },
       }),
       Table.configure({ resizable: true }),
-      TableRow,
+      ResizableTableRow,
       TableHeader,
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),

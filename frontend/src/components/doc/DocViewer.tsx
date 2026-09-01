@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { renderMermaidBlocks } from '@/utils/mermaid'
+import { attachCodeCopyButtons } from '@/utils/codeCopy'
 import { sanitizeHtml } from '@/utils/sanitize'
 
 interface DocViewerProps {
@@ -26,6 +27,13 @@ export default function DocViewer({ content, containerRef }: DocViewerProps) {
   useEffect(() => {
     if (!containerRef.current) return
     renderMermaidBlocks(containerRef.current)
+  }, [safeContent, containerRef])
+
+  // Give every code block a copy button. Mermaid blocks are skipped inside
+  // attachCodeCopyButtons, so this does not need to wait on the render above.
+  useEffect(() => {
+    if (!containerRef.current) return
+    attachCodeCopyButtons(containerRef.current)
   }, [safeContent, containerRef])
 
   return (

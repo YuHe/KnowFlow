@@ -251,6 +251,49 @@
     cursor: ew-resize;
   }
 
+  /* Table row-resize handle (drag the bottom border of a row to resize).
+     The row class comes from a ProseMirror decoration, not a DOM mutation, so
+     the editor's MutationObserver never sees it. ::before is used because
+     .selectedCell already owns ::after on cells. */
+  .ProseMirror table tr.row-resize-active,
+  .ProseMirror table tr.row-resize-active > td,
+  .ProseMirror table tr.row-resize-active > th {
+    cursor: row-resize;
+  }
+
+  .ProseMirror table tr.row-resize-active > td::before,
+  .ProseMirror table tr.row-resize-active > th::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    right: -1px;
+    bottom: -2px;
+    height: 4px;
+    background-color: theme('colors.indigo.400');
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .ProseMirror table tr.row-resizing > td::before,
+  .ProseMirror table tr.row-resizing > th::before {
+    background-color: theme('colors.indigo.600');
+  }
+
+  /* Live drag preview. The plugin publishes the in-progress height as a custom
+     property so committing or abandoning the drag never disturbs the row's own
+     inline height. !important is needed to beat that inline style, and is
+     contained to the row being dragged. */
+  .ProseMirror table tr.row-resizing {
+    height: var(--row-preview-height) !important;
+  }
+
+  /* Keep the resize cursor for the whole drag, even once the pointer has left
+     the row it started on. */
+  .ProseMirror.row-resize-cursor,
+  .ProseMirror.row-resize-cursor * {
+    cursor: row-resize;
+  }
+
   .ProseMirror .tableWrapper {
     overflow-x: auto;
     margin: 1rem 0;
@@ -330,6 +373,32 @@
   }
 
   .doc-content pre code { @apply bg-transparent p-0 text-inherit; }
+
+  /* Code block copy button (injected by utils/codeCopy for read views).
+     The host wrapper — not the <pre> — is the positioning context, so the
+     button stays put while a long line scrolls horizontally underneath. */
+  .doc-content .code-block-host {
+    position: relative;
+    margin: 1rem 0;
+  }
+
+  .doc-content .code-block-host > pre { margin: 0; }
+
+  .doc-content .code-copy-btn {
+    @apply absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md
+           border border-white/15 bg-white/10 text-gray-300 opacity-0 transition;
+  }
+
+  .doc-content .code-copy-btn > svg { @apply h-3.5 w-3.5; }
+
+  .doc-content .code-copy-btn:hover { @apply bg-white/20 text-white; }
+
+  /* Revealed on hover, and always while focused so it is reachable by keyboard. */
+  .doc-content .code-block-host:hover .code-copy-btn,
+  .doc-content .code-copy-btn:focus-visible,
+  .doc-content .code-copy-btn.is-copied { @apply opacity-100; }
+
+  .doc-content .code-copy-btn.is-copied { @apply border-green-400/40 text-green-400; }
 
   .doc-content a { @apply text-primary underline underline-offset-2 hover:text-primary/80; }
 
