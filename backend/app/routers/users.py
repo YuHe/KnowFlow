@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import UserOut
+from app.schemas.auth import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, UserOut
 from app.utils.auth import get_current_active_user, hash_password, verify_password
 from app.utils.response import err, ok
 
@@ -25,7 +25,9 @@ class UserUpdatePayload(BaseModel):
 
 class PasswordChangePayload(BaseModel):
     old_password: str
-    new_password: str = Field(..., min_length=8)
+    new_password: str = Field(
+        ..., min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH
+    )
 
 
 # ---------------------------------------------------------------------------

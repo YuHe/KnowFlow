@@ -32,12 +32,21 @@ class UserOut(BaseModel):
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_\-]{3,64}$")
 
+# Every endpoint that sets a password enforces these — registration,
+# /auth/change-password and /users/me/password. Keep it one constant: when
+# registration required 8 and change-password required 6, a user was forced to
+# pick a strong password and could then immediately weaken it.
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 128
+
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
     display_name: str = Field(..., min_length=1, max_length=128)
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(
+        ..., min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH
+    )
 
     @field_validator("username")
     @classmethod
@@ -47,13 +56,6 @@ class RegisterRequest(BaseModel):
                 "Username must be 3-64 characters, letters/digits/underscore/hyphen only."
             )
         return v.lower()
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters.")
-        return v
 
 
 class LoginRequest(BaseModel):

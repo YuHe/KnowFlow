@@ -17,6 +17,16 @@ export const ROLE_LEVELS: Record<string, number> = {
 export type KbRole = typeof KB_ROLES[keyof typeof KB_ROLES]
 export type SystemRole = 'user' | 'super_admin'
 
+// Auth field rules, shared by every form that sets one of these values
+// (RegisterPage, ProfilePage). They mirror backend/app/schemas/auth.py — keep
+// them in sync: anything a form accepts but the schema rejects surfaces only as
+// an opaque 422 after submit.
+export const PASSWORD_MIN_LENGTH = 8
+export const PASSWORD_MAX_LENGTH = 128
+export const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,64}$/
+export const USERNAME_RULE_HINT = '3-64位字母、数字、下划线或连字符'
+export const DISPLAY_NAME_MAX_LENGTH = 128
+
 // ============ API Response wrapper ============
 
 export interface ApiResponse<T = unknown> {

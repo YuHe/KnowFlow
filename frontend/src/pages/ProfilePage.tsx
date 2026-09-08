@@ -5,6 +5,7 @@ import { favoritesApi } from '../api/favorites';
 import { templatesApi } from '../api/templates';
 import apiClient from '../api/client';
 import type { ApiResponse, User, DocumentFavorite, DocumentTemplate } from '../types';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../types';
 
 type TabType = 'profile' | 'password' | 'favorites' | 'templates';
 
@@ -64,7 +65,8 @@ const ProfilePage: React.FC = () => {
     const errs: Record<string, string> = {};
     if (!passwordForm.currentPassword) errs.currentPassword = '请输入当前密码';
     if (!passwordForm.newPassword) errs.newPassword = '请输入新密码';
-    else if (passwordForm.newPassword.length < 6) errs.newPassword = '新密码至少6位';
+    else if (passwordForm.newPassword.length < PASSWORD_MIN_LENGTH) errs.newPassword = `新密码至少${PASSWORD_MIN_LENGTH}位`;
+    else if (passwordForm.newPassword.length > PASSWORD_MAX_LENGTH) errs.newPassword = `新密码不超过${PASSWORD_MAX_LENGTH}位`;
     if (passwordForm.newPassword !== passwordForm.confirmPassword) errs.confirmPassword = '两次密码不一致';
     if (Object.keys(errs).length > 0) { setPasswordErrors(errs); return; }
 
@@ -185,9 +187,11 @@ const ProfilePage: React.FC = () => {
             {activeTab === 'password' && (
               <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
+                  <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
                   <input
+                    id="currentPassword"
                     type="password"
+                    autoComplete="current-password"
                     value={passwordForm.currentPassword}
                     onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${passwordErrors.currentPassword ? 'border-red-400' : 'border-gray-300'}`}
@@ -196,9 +200,12 @@ const ProfilePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+                  <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
                   <input
+                    id="newPassword"
                     type="password"
+                    autoComplete="new-password"
+                    placeholder={`至少${PASSWORD_MIN_LENGTH}位`}
                     value={passwordForm.newPassword}
                     onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${passwordErrors.newPassword ? 'border-red-400' : 'border-gray-300'}`}
@@ -207,9 +214,11 @@ const ProfilePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+                  <label htmlFor="confirmNewPassword" className="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
                   <input
+                    id="confirmNewPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={passwordForm.confirmPassword}
                     onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${passwordErrors.confirmPassword ? 'border-red-400' : 'border-gray-300'}`}

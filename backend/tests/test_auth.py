@@ -60,15 +60,54 @@ class TestRegister:
         assert resp.status_code == 409, resp.text
 
     async def test_register_invalid_password(self, async_client: AsyncClient):
-        """Password shorter than 6 characters is rejected with 422."""
+        """A password one character below the minimum is rejected with 422.
+
+        7 characters, not 2: the frontend form used to allow 6, so this length
+        is the one that actually reached the API and failed.
+        """
         payload = {
             "username": "shortpassuser",
             "display_name": "Short Pass",
             "email": "shortpass@example.com",
-            "password": "ab",
+            "password": "Short12",
         }
         resp = await async_client.post("/api/v1/auth/register", json=payload)
         assert resp.status_code == 422, resp.text
+        details = resp.json()["error"]["details"]
+        # The client shows each message under the input it names, so the
+        # offending field has to be identifiable.
+        assert [d["loc"] for d in details] == [["body", "password"]]
+
+    async def test_register_password_at_minimum(self, async_client: AsyncClient):
+        """Exactly the minimum length is accepted."""
+        payload = {
+            "username": "minpassuser",
+            "display_name": "Min Pass",
+            "email": "minpass@example.com",
+            "password": "Short123",  # 8 characters
+        }
+        resp = await async_client.post("/api/v1/auth/register", json=payload)
+        assert resp.status_code == 201, resp.text
+
+    async def test_validation_error_does_not_echo_the_password(
+        self, async_client: AsyncClient
+    ):
+        """A 422 must not carry the rejected password back to the client.
+
+        pydantic's errors() includes the rejected value under "input"; for this
+        endpoint that is the plaintext password, and the response body may be
+        captured by proxies or log collectors.
+        """
+        payload = {
+            "username": "echocheck",
+            "display_name": "Echo Check",
+            "email": "echo@example.com",
+            "password": "sekrit",
+        }
+        resp = await async_client.post("/api/v1/auth/register", json=payload)
+        assert resp.status_code == 422, resp.text
+        assert "sekrit" not in resp.text
+        assert all("input" not in d for d in resp.json()["error"]["details"])
 
 
 # ---------------------------------------------------------------------------
@@ -202,3 +241,38 @@ class TestAuthenticatedEndpoints:
             headers=headers,
         )
         assert resp.status_code == 400, resp.text
+
+    async def test_change_password_enforces_the_registration_minimum(
+        self, async_client: AsyncClient, test_user, auth_headers
+    ):
+        """A new password below the shared minimum is rejected with 422.
+
+        This endpoint used to allow 6 characters while registration demanded 8,
+        so a user could pick a strong password at signup and immediately weaken
+        it here.
+        """
+        headers = await auth_headers(test_user)
+        resp = await async_client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": "TestPass123!", "new_password": "Short12"},
+            headers=headers,
+        )
+        assert resp.status_code == 422, resp.text
+        details = resp.json()["error"]["details"]
+        assert [d["loc"] for d in details] == [["body", "new_password"]]
+
+    async def test_users_me_password_enforces_the_same_minimum(
+        self, async_client: AsyncClient, test_user, auth_headers
+    ):
+        """PUT /users/me/password shares the constant with the other two.
+
+        A second change-password endpoint exists; both must agree, or the
+        stricter one is merely advisory.
+        """
+        headers = await auth_headers(test_user)
+        resp = await async_client.put(
+            "/api/v1/users/me/password",
+            json={"old_password": "TestPass123!", "new_password": "Short12"},
+            headers=headers,
+        )
+        assert resp.status_code == 422, resp.text

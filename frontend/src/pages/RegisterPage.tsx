@@ -3,16 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../api/auth';
 import { getApiErrorCode, getApiErrorMessage, getApiFieldErrors } from '@/utils';
+import {
+  DISPLAY_NAME_MAX_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  USERNAME_PATTERN,
+  USERNAME_RULE_HINT,
+} from '@/types';
 import logoUrl from '@/assets/logo.png';
-
-// These rules mirror RegisterRequest in backend/app/schemas/auth.py. Keep them
-// in sync: anything the form accepts but the schema rejects surfaces only as an
-// opaque 422 after submit.
-const USERNAME_RE = /^[a-zA-Z0-9_-]{3,64}$/;
-const USERNAME_HINT = '用户名为3-64位字母、数字、下划线或连字符';
-const DISPLAY_NAME_MAX = 128;
-const PASSWORD_MIN = 8;
-const PASSWORD_MAX = 128;
 
 // Backend field name -> form field name, for mapping 422 details onto inputs.
 const FIELD_MAP: Record<string, keyof FormErrors> = {
@@ -72,14 +70,14 @@ const RegisterPage: React.FC = () => {
 
     if (!form.username.trim()) {
       newErrors.username = '请输入用户名';
-    } else if (!USERNAME_RE.test(form.username.trim())) {
-      newErrors.username = USERNAME_HINT;
+    } else if (!USERNAME_PATTERN.test(form.username.trim())) {
+      newErrors.username = `用户名为${USERNAME_RULE_HINT}`;
     }
 
     if (!form.displayName.trim()) {
       newErrors.displayName = '请输入显示名称';
-    } else if (form.displayName.trim().length > DISPLAY_NAME_MAX) {
-      newErrors.displayName = `显示名称不超过${DISPLAY_NAME_MAX}个字符`;
+    } else if (form.displayName.trim().length > DISPLAY_NAME_MAX_LENGTH) {
+      newErrors.displayName = `显示名称不超过${DISPLAY_NAME_MAX_LENGTH}个字符`;
     }
 
     if (!form.email.trim()) {
@@ -90,10 +88,10 @@ const RegisterPage: React.FC = () => {
 
     if (!form.password) {
       newErrors.password = '请输入密码';
-    } else if (form.password.length < PASSWORD_MIN) {
-      newErrors.password = `密码至少${PASSWORD_MIN}位`;
-    } else if (form.password.length > PASSWORD_MAX) {
-      newErrors.password = `密码不超过${PASSWORD_MAX}位`;
+    } else if (form.password.length < PASSWORD_MIN_LENGTH) {
+      newErrors.password = `密码至少${PASSWORD_MIN_LENGTH}位`;
+    } else if (form.password.length > PASSWORD_MAX_LENGTH) {
+      newErrors.password = `密码不超过${PASSWORD_MAX_LENGTH}位`;
     }
 
     if (!form.confirmPassword) {
@@ -179,7 +177,7 @@ const RegisterPage: React.FC = () => {
                 type="text"
                 value={form.username}
                 onChange={updateField('username')}
-                placeholder="3-64位字母、数字、下划线或连字符"
+                placeholder={USERNAME_RULE_HINT}
                 autoComplete="username"
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition ${
                   errors.username ? 'border-red-400 bg-red-50' : 'border-gray-300'
@@ -235,7 +233,7 @@ const RegisterPage: React.FC = () => {
                 type="password"
                 value={form.password}
                 onChange={updateField('password')}
-                placeholder={`至少${PASSWORD_MIN}位`}
+                placeholder={`至少${PASSWORD_MIN_LENGTH}位`}
                 autoComplete="new-password"
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition ${
                   errors.password ? 'border-red-400 bg-red-50' : 'border-gray-300'
