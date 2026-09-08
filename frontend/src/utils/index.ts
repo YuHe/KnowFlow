@@ -219,3 +219,62 @@ export function getErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error
   return '未知错误'
 }
+
+// ============ API Error Utilities ============
+
+interface ApiErrorDetail {
+  loc?: unknown[]
+  msg?: string
+}
+
+interface ApiErrorBody {
+  error?: { code?: string; message?: string; details?: ApiErrorDetail[] }
+  detail?: unknown
+}
+
+function getApiErrorBody(error: unknown): ApiErrorBody | undefined {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const data = (error as { response?: { data?: unknown } }).response?.data
+    if (data && typeof data === 'object') return data as ApiErrorBody
+  }
+  return undefined
+}
+
+/**
+ * Map a 422 VALIDATION_ERROR body onto the request fields that failed, keyed by
+ * field name. FastAPI reports `loc: ["body", "password"]`, so the field is the
+ * last segment. Returns {} for every other error shape — callers should fall
+ * back to `getApiErrorMessage`.
+ *
+ * Without this, an axios rejection carries only "Request failed with status
+ * code 422" and the caller has no way to tell which input the user must fix.
+ */
+export function getApiFieldErrors(error: unknown): Record<string, string> {
+  const details = getApiErrorBody(error)?.error?.details
+  if (!Array.isArray(details)) return {}
+  const fields: Record<string, string> = {}
+  for (const detail of details) {
+    const loc = detail?.loc
+    if (!Array.isArray(loc) || loc.length === 0) continue
+    const field = String(loc[loc.length - 1])
+    // pydantic prefixes messages raised by a custom validator with
+    // "Value error, "; it means nothing to the person reading the form.
+    const msg = detail.msg?.replace(/^Value error,\s*/, '')
+    // Keep the first message per field; later ones are usually less specific.
+    if (msg && !fields[field]) fields[field] = msg
+  }
+  return fields
+}
+
+/** Human-readable message from the backend's {success, data, error} envelope. */
+export function getApiErrorMessage(error: unknown, fallback = '请求失败，请重试'): string {
+  const body = getApiErrorBody(error)
+  if (body?.error?.message) return body.error.message
+  if (typeof body?.detail === 'string') return body.detail
+  return fallback
+}
+
+/** Machine-readable code from the envelope, e.g. 'DUPLICATE_USER'. */
+export function getApiErrorCode(error: unknown): string | undefined {
+  return getApiErrorBody(error)?.error?.code
+}

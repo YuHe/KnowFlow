@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { getApiErrorCode, getApiErrorMessage } from '@/utils';
 import logoUrl from '@/assets/logo.png';
+
+// The API replies in English; this form is Chinese. Translate the codes
+// /auth/login can return and fall back to the raw message for the rest.
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  INVALID_CREDENTIALS: '账号或密码错误',
+  ACCOUNT_DISABLED: '该账号已被禁用，请联系管理员',
+};
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -31,7 +39,13 @@ const LoginPage: React.FC = () => {
       await login({ account: username.trim(), password });
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : '登录失败，请检查账号和密码');
+      // Prefer the backend's own reason (bad credentials vs disabled account)
+      // over axios' bare "Request failed with status code 401".
+      const code = getApiErrorCode(err);
+      setFormError(
+        (code && ERROR_CODE_MESSAGES[code]) ||
+          getApiErrorMessage(err, '登录失败，请检查账号和密码'),
+      );
     }
   };
 

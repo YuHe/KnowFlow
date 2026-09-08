@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,9 +41,10 @@ async def register(
     from app.config import settings
 
     if not settings.ALLOW_REGISTRATION:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Registration is currently disabled.",
+        return err(
+            "REGISTRATION_DISABLED",
+            "Registration is currently disabled.",
+            403,
         )
 
     # Check uniqueness

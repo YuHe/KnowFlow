@@ -2,7 +2,32 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../api/auth';
+import { getApiErrorCode, getApiErrorMessage, getApiFieldErrors } from '@/utils';
 import logoUrl from '@/assets/logo.png';
+
+// These rules mirror RegisterRequest in backend/app/schemas/auth.py. Keep them
+// in sync: anything the form accepts but the schema rejects surfaces only as an
+// opaque 422 after submit.
+const USERNAME_RE = /^[a-zA-Z0-9_-]{3,64}$/;
+const USERNAME_HINT = '用户名为3-64位字母、数字、下划线或连字符';
+const DISPLAY_NAME_MAX = 128;
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 128;
+
+// Backend field name -> form field name, for mapping 422 details onto inputs.
+const FIELD_MAP: Record<string, keyof FormErrors> = {
+  username: 'username',
+  display_name: 'displayName',
+  email: 'email',
+  password: 'password',
+};
+
+// The API replies in English; this form is Chinese. Translate the codes
+// /auth/register can return and fall back to the raw message for the rest.
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  DUPLICATE_USER: '用户名或邮箱已被注册',
+  REGISTRATION_DISABLED: '当前系统已关闭注册',
+};
 
 interface RegisterForm {
   username: string;
@@ -23,8 +48,8 @@ interface FormErrors {
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const { initAuth } = useAuthStore();
-  const clearError = () => {};
-  const error = '';
+  const [error, setError] = useState('');
+  const clearError = () => setError('');
   const [isLoading, setIsLoading] = useState(false);
 
   const [form, setForm] = useState<RegisterForm>({
@@ -47,14 +72,14 @@ const RegisterPage: React.FC = () => {
 
     if (!form.username.trim()) {
       newErrors.username = '请输入用户名';
-    } else if (!/^[a-zA-Z0-9_]{3,20}$/.test(form.username)) {
-      newErrors.username = '用户名为3-20位字母、数字或下划线';
+    } else if (!USERNAME_RE.test(form.username.trim())) {
+      newErrors.username = USERNAME_HINT;
     }
 
     if (!form.displayName.trim()) {
       newErrors.displayName = '请输入显示名称';
-    } else if (form.displayName.trim().length > 50) {
-      newErrors.displayName = '显示名称不超过50个字符';
+    } else if (form.displayName.trim().length > DISPLAY_NAME_MAX) {
+      newErrors.displayName = `显示名称不超过${DISPLAY_NAME_MAX}个字符`;
     }
 
     if (!form.email.trim()) {
@@ -65,8 +90,10 @@ const RegisterPage: React.FC = () => {
 
     if (!form.password) {
       newErrors.password = '请输入密码';
-    } else if (form.password.length < 6) {
-      newErrors.password = '密码至少6位';
+    } else if (form.password.length < PASSWORD_MIN) {
+      newErrors.password = `密码至少${PASSWORD_MIN}位`;
+    } else if (form.password.length > PASSWORD_MAX) {
+      newErrors.password = `密码不超过${PASSWORD_MAX}位`;
     }
 
     if (!form.confirmPassword) {
@@ -81,6 +108,7 @@ const RegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     if (!validate()) return;
 
     setIsLoading(true);
@@ -94,7 +122,23 @@ const RegisterPage: React.FC = () => {
       await initAuth();
       navigate('/');
     } catch (err: unknown) {
-      setErrors({ username: err instanceof Error ? err.message : '注册失败，请重试' });
+      // A 422 names the offending fields; show each message under its own input
+      // rather than dumping axios' "Request failed with status code 422" onto
+      // whichever field happens to come first.
+      const fieldErrors: FormErrors = {};
+      for (const [apiField, msg] of Object.entries(getApiFieldErrors(err))) {
+        const formField = FIELD_MAP[apiField];
+        if (formField) fieldErrors[formField] = msg;
+      }
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors(fieldErrors);
+      } else {
+        const code = getApiErrorCode(err);
+        setError(
+          (code && ERROR_CODE_MESSAGES[code]) ||
+            getApiErrorMessage(err, '注册失败，请重试'),
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +179,7 @@ const RegisterPage: React.FC = () => {
                 type="text"
                 value={form.username}
                 onChange={updateField('username')}
-                placeholder="3-20位字母、数字或下划线"
+                placeholder="3-64位字母、数字、下划线或连字符"
                 autoComplete="username"
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition ${
                   errors.username ? 'border-red-400 bg-red-50' : 'border-gray-300'
@@ -191,7 +235,7 @@ const RegisterPage: React.FC = () => {
                 type="password"
                 value={form.password}
                 onChange={updateField('password')}
-                placeholder="至少6位"
+                placeholder={`至少${PASSWORD_MIN}位`}
                 autoComplete="new-password"
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition ${
                   errors.password ? 'border-red-400 bg-red-50' : 'border-gray-300'

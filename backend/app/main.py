@@ -209,6 +209,15 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
+        # exc.errors() echoes the rejected value back under "input" — for
+        # /auth/register and /auth/change-password that is the plaintext
+        # password. Keep only loc/msg/type: enough for the client to show the
+        # error under the offending field, without putting credentials in a
+        # response body that proxies and log collectors may capture.
+        details = [
+            {"loc": e.get("loc", []), "msg": e.get("msg", ""), "type": e.get("type", "")}
+            for e in exc.errors()
+        ]
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={
@@ -217,7 +226,7 @@ def create_app() -> FastAPI:
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": "Request validation failed",
-                    "details": exc.errors(),
+                    "details": details,
                 },
             },
         )
