@@ -131,3 +131,36 @@ describe('dataUrlToFile', () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe('gapcursor stylesheet', () => {
+  it('is declared outside @layer so Tailwind cannot purge it', async () => {
+    // Tailwind drops rules inside @layer whose class names never appear in the
+    // scanned source. `.ProseMirror-gapcursor` only exists at runtime, so a
+    // layered declaration was silently missing from the production build —
+    // leaving the caret invisible between block nodes even though the plugin
+    // was registered. Guarded structurally: a build-output assertion would
+    // require running vite here.
+    const fs = await import('node:fs/promises')
+    const path = await import('node:path')
+    const css = await fs.readFile(
+      path.resolve(process.cwd(), 'src/index.css'),
+      'utf-8',
+    )
+
+    const ruleIndex = css.indexOf('.ProseMirror-gapcursor {')
+    expect(ruleIndex).toBeGreaterThan(-1)
+
+    // Depth of @layer nesting at the rule's position must be zero.
+    let depth = 0
+    let inLayer = false
+    for (let i = 0; i < ruleIndex; i++) {
+      if (css.startsWith('@layer', i)) inLayer = true
+      if (css[i] === '{') depth++
+      else if (css[i] === '}') {
+        depth--
+        if (depth === 0) inLayer = false
+      }
+    }
+    expect(inLayer && depth > 0).toBe(false)
+  })
+})

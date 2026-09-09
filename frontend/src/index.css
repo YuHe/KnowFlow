@@ -162,41 +162,6 @@
     @apply mt-3;
   }
 
-  /* Gapcursor.
-     StarterKit registers the gapcursor plugin, but prosemirror-gapcursor ships
-     its stylesheet separately and expects the host to include it — which never
-     happened. The widget was therefore a bare, invisible <div>: the caret could
-     not be seen between block nodes, and because it lacked `position: absolute`
-     it sat in the flow and picked up the `mt-3` rule above, nudging the layout.
-     Declared here rather than importing the package CSS so it lives with the
-     rest of the editor's appearance. */
-  .ProseMirror-gapcursor {
-    display: none;
-    pointer-events: none;
-    position: absolute;
-    margin: 0;
-  }
-
-  .ProseMirror-gapcursor::after {
-    content: '';
-    display: block;
-    position: absolute;
-    top: -2px;
-    width: 20px;
-    border-top: 1px solid theme('colors.gray.800');
-    animation: prosemirror-caret-blink 1.1s steps(2, start) infinite;
-  }
-
-  @keyframes prosemirror-caret-blink {
-    to {
-      visibility: hidden;
-    }
-  }
-
-  .ProseMirror-focused .ProseMirror-gapcursor {
-    display: block;
-  }
-
   .ProseMirror ul,
   .ProseMirror ol {
     @apply pl-6;
@@ -495,4 +460,44 @@
   .doc-tree-item.active {
     @apply bg-primary/10 text-primary font-medium;
   }
+}
+
+/* ── Gapcursor ─────────────────────────────────────────────────────────────
+   StarterKit registers the gapcursor plugin, but prosemirror-gapcursor ships
+   its stylesheet separately and expects the host to include it — which never
+   happened. The widget was therefore a bare, invisible <div>: no caret could be
+   seen between block nodes, and lacking `position: absolute` it sat in the flow
+   and picked up `.ProseMirror > * + *`'s margin, nudging the layout. That is
+   half of why pasting an image at the end of a document read as "the editor is
+   frozen" — see TrailingNode for the other half.
+
+   Deliberately OUTSIDE @layer components. Tailwind purges layered rules whose
+   class names never appear in the scanned source, and this class only ever
+   exists at runtime: inside the layer these rules were silently dropped from
+   the production stylesheet. Verified by grepping the built CSS. */
+.ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+  margin: 0;
+}
+
+.ProseMirror-gapcursor::after {
+  content: '';
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid #1f2937;
+  animation: prosemirror-caret-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes prosemirror-caret-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
 }
