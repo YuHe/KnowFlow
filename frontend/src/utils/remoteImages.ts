@@ -103,6 +103,19 @@ function describeFailure(e: unknown): string {
  * Downloads run concurrently up to MAX_CONCURRENT; one failure never blocks the
  * others. Identical URLs are fetched once and reused.
  */
+/**
+ * Is the character at `offset` on a line that is part of a pipe table?
+ *
+ * Matters because the fallback for a failed image cannot be a separate
+ * paragraph inside a table row: a pipe-table row must occupy exactly one line,
+ * so a blank line splits it and marked then renders the header, the delimiter
+ * and every remaining row as loose paragraphs — the table is destroyed.
+ */
+function isInsideTableRow(md: string, offset: number): boolean {
+  const lineStart = md.lastIndexOf('\n', offset - 1) + 1
+  return /^[ \t]{0,3}\|/.test(md.slice(lineStart, offset + 1))
+}
+
 export async function localizeRemoteImages(
   md: string,
   kbId: string,
@@ -158,7 +171,7 @@ export async function localizeRemoteImages(
   // match changes the counts.
   let downloaded = 0
   let failed = 0
-  const localized = md.replace(MD_IMG_RE, (full, alt, url) => {
+  const localized = md.replace(MD_IMG_RE, (full, alt, url, offset: number) => {
     if (!isRemoteLink(url)) return full
     const local = localUrls.get(url)
     if (local) {
@@ -169,6 +182,13 @@ export async function localizeRemoteImages(
     // Keep the image node (it renders wherever the URL is reachable) and append
     // a visible link to the original so the URL is recoverable from the
     // document itself — a broken <img> alone shows nothing the user can act on.
+    if (isInsideTableRow(md, offset)) {
+      // Stay on one line, and keep the label short: a full URL as link text
+      // would blow out the column. `|` in a URL has to be escaped or it would
+      // be read as a cell separator.
+      const safeUrl = url.replace(/\|/g, '%7C')
+      return `${full} [原图链接](${safeUrl})`
+    }
     // Separate paragraph: an inline link next to an image is dropped when
     // TipTap parses the image into a block node.
     return `${full}\n\n[原图链接：${url}](${url})`

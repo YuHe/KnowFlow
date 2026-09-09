@@ -308,3 +308,57 @@ describe('localizeRemoteImages', () => {
     expect(res.md).toBe(md)
   })
 })
+
+describe('failed image inside a markdown table row', () => {
+  // Regression: the fallback for a failed download was `${image}\n\n[原图链接…]`.
+  // A pipe-table row has to occupy exactly one line, so that blank line split
+  // the row and marked then rendered the header, the delimiter and every
+  // remaining row as loose paragraphs — the table was destroyed. Reported
+  // against a Baidu wiki attachment URL, which cannot be fetched server-side.
+  const URL_IN_TABLE = 'https://wiki.example.com/attach?attachId=36ae&docGuid=dH'
+  const TABLE = [
+    `|点击分布水平|host数|占比|![](${URL_IN_TABLE})|`,
+    '|-|-|-|-|',
+    '|>5%|5|0.01%||',
+  ].join('\n')
+
+  beforeEach(() => {
+    fetchRemoteImage.mockRejectedValue(new Error('unreachable'))
+  })
+
+  it('keeps the fallback on the same line', async () => {
+    const { md, failed } = await localizeRemoteImages(TABLE, KB)
+    expect(failed).toBe(1)
+    expect(md.split('\n')).toHaveLength(3)
+    expect(md.split('\n')[0]).toContain('原图链接')
+  })
+
+  it('still renders as a real table', async () => {
+    const { markdownToHtml } = await import('@/utils/markdown')
+    const { md } = await localizeRemoteImages(TABLE, KB)
+    const html = markdownToHtml(md, false)
+    expect(html).toContain('<table')
+    expect(html).toContain('<img')
+    expect(html).toContain('原图链接')
+  })
+
+  it('keeps the original URL recoverable from the cell', async () => {
+    const { md } = await localizeRemoteImages(TABLE, KB)
+    expect(md).toContain(URL_IN_TABLE)
+  })
+
+  it('escapes a pipe in the URL so it cannot split the cell', async () => {
+    const piped = `|a|b|![](https://wiki.example.com/x?a=1|b)|\n|-|-|-|\n|1|2|3|`
+    const { md } = await localizeRemoteImages(piped, KB)
+    expect(md.split('\n')).toHaveLength(3)
+    expect(md).toContain('%7C')
+  })
+
+  it('still uses a separate paragraph outside a table', async () => {
+    const { md } = await localizeRemoteImages(
+      `text\n\n![a](${URL_IN_TABLE})\n\nmore`,
+      KB,
+    )
+    expect(md).toContain(`\n\n[原图链接：${URL_IN_TABLE}]`)
+  })
+})
