@@ -37,8 +37,12 @@ const config: Config = {
     'markerUnits', 'markerWidth', 'markerHeight', 'refX', 'refY', 'orient',
     'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline',
     'clip-path', 'clip-rule', 'fill-opacity', 'fill-rule', 'href',
-    // table sizing
-    'span', 'align', 'valign',
+    // table sizing. `colwidth` is TipTap's own non-standard attribute on
+    // td/th and is the ONLY place @tiptap/extension-table-cell reads a column
+    // width from — it never consults the <colgroup>. Without it here the
+    // sanitizer stripped every colwidth, so toggling source mode silently reset
+    // all column widths back to the 25px minimum.
+    'span', 'align', 'valign', 'colwidth',
     // image
     'alt', 'title', 'src', 'target', 'rel',
   ],

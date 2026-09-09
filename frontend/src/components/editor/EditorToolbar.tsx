@@ -604,12 +604,24 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
         <>
           <Divider />
           <ToolbarButton
+            onClick={() => editor.chain().focus().addColumnBefore().run()}
+            title="左侧插入列"
+          >
+            <span className="text-xs font-medium">+列前</span>
+          </ToolbarButton>
+          <ToolbarButton
             onClick={() => editor.chain().focus().addColumnAfter().run()}
             title="右侧插入列"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4m6-18h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M9 3v18M15 3v18" />
             </svg>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().addRowBefore().run()}
+            title="上方插入行"
+          >
+            <span className="text-xs font-medium">+行上</span>
           </ToolbarButton>
           <ToolbarButton
             onClick={() => editor.chain().focus().addRowAfter().run()}
@@ -649,6 +661,12 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
             title="切换表头行"
           >
             <span className="text-xs font-medium">表头</span>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeaderColumn().run()}
+            title="切换表头列"
+          >
+            <span className="text-xs font-medium">表头列</span>
           </ToolbarButton>
 
           {/* Row height — presets; the same value can also be set by dragging a

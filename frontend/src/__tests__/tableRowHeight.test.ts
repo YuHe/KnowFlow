@@ -187,8 +187,13 @@ describe('drag to resize', () => {
     return { editor, element }
   }
 
-  const mouse = (type: string, clientX: number, clientY: number) =>
-    new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY })
+  const mouse = (type: string, clientX: number, clientY: number, buttons = 0) =>
+    new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons, clientX, clientY })
+
+  // A real browser reports buttons === 1 for every mousemove while the left
+  // button is held. The plugin uses that to notice a mouseup it never saw (the
+  // pointer left the window), so drag moves must carry it.
+  const drag = (clientX: number, clientY: number) => mouse('mousemove', clientX, clientY, 1)
 
   let restoreGeometry: (() => void) | undefined
 
@@ -210,7 +215,7 @@ describe('drag to resize', () => {
     expect(element.querySelector('tr.row-resize-active')).not.toBeNull()
 
     cell.dispatchEvent(mouse('mousedown', 50, ROW_BOTTOM))
-    window.dispatchEvent(mouse('mousemove', 50, ROW_BOTTOM + 50))
+    window.dispatchEvent(drag(50, ROW_BOTTOM + 50))
     window.dispatchEvent(mouse('mouseup', 50, ROW_BOTTOM + 50))
 
     // 40px measured + 50px dragged.
@@ -220,13 +225,34 @@ describe('drag to resize', () => {
     editor.destroy()
   })
 
+  it('commits when the mouseup happened outside the window', () => {
+    // Releasing the button off-window delivers no mouseup; the next mousemove
+    // arrives with buttons === 0. Without this the row stayed glued to the
+    // cursor until the next click.
+    const { editor, element } = mountEditor()
+    const cell = element.querySelector('td') as HTMLElement
+
+    cell.dispatchEvent(mouse('mousemove', 50, ROW_BOTTOM))
+    cell.dispatchEvent(mouse('mousedown', 50, ROW_BOTTOM))
+    window.dispatchEvent(drag(50, ROW_BOTTOM + 30))
+    window.dispatchEvent(mouse('mousemove', 50, ROW_BOTTOM + 30, 0))
+
+    expect(element.querySelector('tr.row-resize-active')).toBeNull()
+    expect(editor.getHTML()).toContain('height: 70px')
+
+    // Further movement must not keep resizing.
+    window.dispatchEvent(drag(50, ROW_BOTTOM + 300))
+    expect(editor.getHTML()).toContain('height: 70px')
+    editor.destroy()
+  })
+
   it('never shrinks a row below the minimum', () => {
     const { editor, element } = mountEditor()
     const cell = element.querySelector('td') as HTMLElement
 
     cell.dispatchEvent(mouse('mousemove', 50, ROW_BOTTOM))
     cell.dispatchEvent(mouse('mousedown', 50, ROW_BOTTOM))
-    window.dispatchEvent(mouse('mousemove', 50, ROW_BOTTOM - 500))
+    window.dispatchEvent(drag(50, ROW_BOTTOM - 500))
     window.dispatchEvent(mouse('mouseup', 50, ROW_BOTTOM - 500))
 
     expect(editor.getHTML()).toContain(`height: ${MIN_ROW_HEIGHT}px`)
@@ -253,6 +279,32 @@ describe('drag to resize', () => {
 
     cell.dispatchEvent(mouse('mousemove', CELL_RIGHT, ROW_BOTTOM))
     expect(element.querySelector('tr.row-resize-active')).toBeNull()
+    editor.destroy()
+  })
+
+  it('yields the bottom-left corner too', () => {
+    // prosemirror-tables arms a handle from the inner 5px of a cell's LEFT edge
+    // as well, mapping it back to the preceding column's border. Only the right
+    // edge used to be yielded, so this corner silently blocked resizing the
+    // column to the left — and this plugin wins, because TipTap reverses
+    // extension order and runs it first.
+    const { editor, element } = mountEditor()
+    const cell = element.querySelector('td') as HTMLElement
+
+    cell.dispatchEvent(mouse('mousemove', 0, ROW_BOTTOM))
+    expect(element.querySelector('tr.row-resize-active')).toBeNull()
+
+    cell.dispatchEvent(mouse('mousemove', 3, ROW_BOTTOM))
+    expect(element.querySelector('tr.row-resize-active')).toBeNull()
+    editor.destroy()
+  })
+
+  it('still arms between the two yielded edges', () => {
+    const { editor, element } = mountEditor()
+    const cell = element.querySelector('td') as HTMLElement
+
+    cell.dispatchEvent(mouse('mousemove', CELL_RIGHT / 2, ROW_BOTTOM))
+    expect(element.querySelector('tr.row-resize-active')).not.toBeNull()
     editor.destroy()
   })
 

@@ -29,6 +29,9 @@ const EDGE_TOLERANCE = 5
 /** Read a pixel row height off a <tr>, ignoring anything unusable. */
 export function parseRowHeight(element: HTMLElement): number | null {
   const raw = element.style?.height || element.getAttribute('height') || ''
+  // Reject relative units outright: parseInt would silently turn "50%" into 50
+  // pixels, shrinking a row that asked to be half the table.
+  if (/^\s*-?[\d.]+\s*(%|e[mx]|r[e]?m|v[hw]|ch)\s*$/i.test(raw)) return null
   const value = Number.parseInt(raw, 10)
   return Number.isFinite(value) && value > 0 ? value : null
 }
@@ -88,9 +91,16 @@ function rowEdgeUnderPointer(view: EditorView, event: MouseEvent): number | null
   const cell = target.closest('td, th')
   if (!cell) return null
   const cellRect = cell.getBoundingClientRect()
-  // The right border belongs to column resizing (prosemirror-tables). Yield the
-  // bottom-right corner to it rather than having the two fight over ~5px.
+  // Both vertical borders belong to column resizing (prosemirror-tables): it
+  // arms a handle from the inner EDGE_TOLERANCE px of a cell's right edge *and*
+  // from the same band on its left edge, which maps back to the preceding
+  // column's border. Yield both, or this plugin — which runs first, because
+  // TipTap reverses extension order — wins the mousedown in the bottom corners
+  // of every cell and column resizing never sees it. Only the right edge was
+  // yielded before, so the bottom-left 5×5px of each cell silently blocked the
+  // preceding column.
   if (Math.abs(event.clientX - cellRect.right) <= EDGE_TOLERANCE) return null
+  if (Math.abs(event.clientX - cellRect.left) <= EDGE_TOLERANCE) return null
   const rowEl = cell.closest('tr')
   if (!(rowEl instanceof HTMLElement)) return null
   // The <tr> box, not the cell box: a rowspan cell reaches past its own row and
@@ -193,10 +203,19 @@ function rowResizePlugin(): Plugin<ResizeState> {
           const pos = tableRowResizeKey.getState(view.state)?.hoverPos ?? null
           if (pos == null) return false
           const rowDom = view.nodeDOM(pos)
-          const startHeight =
-            rowDom instanceof HTMLElement
-              ? Math.round(rowDom.getBoundingClientRect().height) || MIN_ROW_HEIGHT
-              : MIN_ROW_HEIGHT
+          const rowEl = rowDom instanceof HTMLElement ? rowDom : null
+          // offsetHeight, not getBoundingClientRect().height: the edit page puts
+          // a CSS `zoom` on an ancestor, so the rect is in screen pixels while
+          // the height we write out is in layout pixels. Seeding from the rect
+          // made the row jump to zoom×its size the instant it was grabbed. The
+          // scale factor below converts the pointer delta the same way
+          // ResizableImage does. Rect is the fallback for environments with no
+          // layout engine (jsdom), where offsetHeight is always 0.
+          const offsetHeight = rowEl?.offsetHeight ?? 0
+          const rectHeight = rowEl ? Math.round(rowEl.getBoundingClientRect().height) : 0
+          const startHeight = offsetHeight || rectHeight || MIN_ROW_HEIGHT
+          const zoomScale =
+            offsetHeight > 0 && rectHeight > 0 ? rectHeight / offsetHeight : 1
           // Suppress the text / cell selection this drag would otherwise start.
           // Returning true below also keeps prosemirror-tables from seeing it.
           mouse.preventDefault()
@@ -217,11 +236,19 @@ function rowResizePlugin(): Plugin<ResizeState> {
             view.dispatch(tr)
           }
           const onMove = (moveEvent: MouseEvent) => {
+            // The button was released somewhere we never saw the mouseup (off
+            // the window, or over a native widget). prosemirror-tables guards
+            // its own column drag the same way; without it the row stays glued
+            // to the cursor until the next click.
+            if (moveEvent.buttons === 0) {
+              finish(true)
+              return
+            }
             const drag = tableRowResizeKey.getState(view.state)?.drag
             if (!drag) return
             const height = Math.max(
               MIN_ROW_HEIGHT,
-              Math.round(drag.startHeight + (moveEvent.clientY - drag.startY)),
+              Math.round(drag.startHeight + (moveEvent.clientY - drag.startY) / zoomScale),
             )
             if (height === drag.height) return
             view.dispatch(

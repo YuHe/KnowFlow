@@ -88,9 +88,14 @@ const CELL_BLOCK_CONTENT_SELECTOR = [
 function tableNeedsRawHtml(table: HTMLElement): boolean {
   if (table.querySelector(MERGED_CELL_SELECTOR)) return true
   if (table.querySelector(CELL_BLOCK_CONTENT_SELECTOR)) return true
-  return Array.from(table.querySelectorAll('tr')).some(
-    (row) => Boolean((row as HTMLElement).style?.height),
-  )
+  // Both spellings: an imported table may carry the legacy `height` attribute
+  // rather than an inline style, and parseRowHeight accepts either — so a table
+  // using the attribute form must take the raw-HTML path too or it loses its
+  // heights on the first save.
+  return Array.from(table.querySelectorAll('tr')).some((row) => {
+    const el = row as HTMLElement
+    return Boolean(el.style?.height) || Boolean(el.getAttribute('height'))
+  })
 }
 
 turndown.addRule('tableNeedsRawHtml', {

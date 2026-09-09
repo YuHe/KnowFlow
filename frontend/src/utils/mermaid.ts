@@ -13,6 +13,30 @@ MermaidDefault.initialize({
 let renderSeq = 0
 
 /**
+ * Plain-language hints for parse failures whose real cause the raw mermaid
+ * message does not name.
+ *
+ * Mermaid reports "Parse error on line N" and echoes the offending text, which
+ * does not help if the offending character is punctuation you would never
+ * suspect. `;` is the one that bites in practice: it is mermaid's statement
+ * separator (as in `graph TD;A-->B;`), so a semicolon inside a `timeline` event
+ * or a node label truncates the statement and everything after it is a syntax
+ * error.
+ */
+function diagnose(source: string, message: string): string | null {
+  if (!/parse error/i.test(message)) return null
+
+  const lines = source.split('\n')
+  const lineMatch = message.match(/line (\d+)/i)
+  const offending = lineMatch ? lines[Number(lineMatch[1]) - 1] ?? '' : ''
+
+  if (offending.includes(';')) {
+    return '这一行含有分号。分号在 mermaid 里是语句分隔符，出现在文本里会把语句提前截断——改成中文顿号「、」或逗号即可。'
+  }
+  return null
+}
+
+/**
  * Render a single mermaid source string into SVG markup.
  * Returns the SVG string, or an error message box.
  */
@@ -26,7 +50,14 @@ export async function renderMermaid(source: string): Promise<string> {
     const stray = document.getElementById(id)
     if (stray) stray.remove()
     const msg = err instanceof Error ? err.message : String(err)
-    return `<div style="color:#b91c1c;border:1px solid #fca5a5;background:#fef2f2;padding:8px 12px;border-radius:6px;font-size:13px;text-align:left;">Mermaid 渲染失败: ${msg.replace(/</g, '&lt;')}</div>`
+    const escape = (text: string) => text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const hint = diagnose(source, msg)
+    return (
+      `<div style="color:#b91c1c;border:1px solid #fca5a5;background:#fef2f2;padding:8px 12px;border-radius:6px;font-size:13px;text-align:left;">` +
+      `Mermaid 渲染失败: ${escape(msg)}` +
+      (hint ? `<div style="margin-top:6px;color:#7f1d1d;">${escape(hint)}</div>` : '') +
+      `</div>`
+    )
   }
 }
 
