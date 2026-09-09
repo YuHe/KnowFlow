@@ -283,22 +283,20 @@
     @apply border-border my-4;
   }
 
-  /* Column widths are authoritative, and they come from TipTap's colgroup.
-     `width: 100%` must NOT be forced here: TipTap writes an inline
-     `width: <sum>px` on the table only once *every* column has a stored
-     colwidth, and until then only `min-width`. A stylesheet `width: 100%`
-     therefore governs a fresh table and, under table-layout: fixed, pins its
-     right edge to the container — which is precisely the last column's resize
-     handle, so dragging it could not move anything. Resizing a middle column
-     first gave every column a colwidth, the inline width took over, and only
-     then did the last column become draggable. That was the user-visible bug.
-     `width: auto` is spelled out because @tailwindcss/typography also declares
-     `.prose :where(table) { width: 100% }`; dropping `w-full` alone is not
-     enough. `min-width: 100%` keeps a narrow table filling the page. */
+  /* Column widths are authoritative and come from TipTap's colgroup.
+     `width: 100%` is correct here *provided every column has a colwidth*: once
+     they do, TipTap writes an inline `width: <sum>px` on the table, which beats
+     this rule, and dragging the last column grows the table (the .tableWrapper
+     scrolls). Without colwidths the 100% pins the table's right edge — which is
+     the last column's resize handle — to the container, and that column cannot
+     be dragged at all until some other column has been resized. That is the bug
+     users hit, and the fix is to make sure colwidths always exist: see
+     seedColumnWidths in TableColumnWidth.ts.
+     Do NOT "fix" this by switching to `width: auto`: TipTap's inline
+     `min-width: <n×cellMinWidth>px` then wins and a fresh 3-column table
+     collapses to an ~81px sliver. Measured in Chrome, not guessed. */
   .ProseMirror table {
-    @apply border-collapse;
-    width: auto;
-    min-width: 100%;
+    @apply w-full border-collapse;
     table-layout: fixed;
     margin: 0;
   }
@@ -540,12 +538,9 @@
   }
 
   /* Read view mirrors the editor's table metrics so a document does not shift
-     when you stop editing it. `width: auto; min-width: 100%` matches the editor
-     and lets the stored <col> widths govern. */
+     when you stop editing it. */
   .doc-content table {
-    @apply border-collapse my-4 text-sm;
-    width: auto;
-    min-width: 100%;
+    @apply w-full border-collapse my-4 text-sm;
     table-layout: fixed;
   }
   .doc-content table td,
