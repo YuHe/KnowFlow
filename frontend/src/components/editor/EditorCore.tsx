@@ -46,18 +46,44 @@ turndown.addRule('taskItem', {
     return `- [${checked ? 'x' : ' '}] ${content.trim()}\n`
   },
 })
-// Tables with merged cells or explicit row heights have no GFM pipe-table
-// equivalent — the GFM plugin would silently drop every colspan/rowspan and
-// every row height, so neither could survive a single HTML→MD→HTML round trip
-// (one happens on every save, since content_md is stored alongside
-// content_html, and on every source-mode toggle). Emit such tables as raw HTML
-// instead; marked passes HTML through and our sanitizer keeps the
-// colspan/rowspan attributes and the inline height style.
+// A GFM pipe table can only express *inline* content in a cell, on a single
+// line. Three kinds of table therefore cannot survive an HTML→MD→HTML round
+// trip as a pipe table — and one round trip happens on every save (content_md
+// is stored alongside content_html) and on every source-mode toggle:
+//
+//   1. merged cells      — the plugin silently drops every colspan/rowspan
+//   2. explicit row heights — likewise dropped
+//   3. block content in a cell (<p>, <img>, lists, nested tables…)
+//
+// (3) is the one that shatters the table outright rather than just losing an
+// attribute: turndown-plugin-gfm's cell() does not collapse newlines, so a
+// <p>-wrapped cell becomes `| \nA\n\n |` and marked renders the row as a pile
+// of loose <p> — the table stops being a table. TipTap wraps every cell in <p>,
+// so this applies to essentially all editor-authored tables; it was masked only
+// because TipTap also emits a <colgroup>, which happens to defeat the plugin's
+// isFirstTbody() heuristic and send the table down its own raw-HTML keep()
+// path. Anything without a colgroup — notably the backend importer's
+// Python-Markdown output, which emits <thead> and no colgroup — took the pipe
+// path and shattered. Depending on that accident is what this rule replaces.
+//
+// Emit such tables as raw HTML instead; marked passes HTML through and our
+// sanitizer keeps colspan/rowspan, the inline height style, and <img> in cells.
 const MERGED_CELL_SELECTOR =
   'td[colspan]:not([colspan="1"]), td[rowspan]:not([rowspan="1"]), th[colspan]:not([colspan="1"]), th[rowspan]:not([rowspan="1"])'
 
+// Block-level content inside a cell. `img` is included because TipTap's image
+// node is block-level (group: 'block'), so it is a cell's direct child and has
+// no inline pipe-table representation that keeps its width.
+const CELL_BLOCK_CONTENT_SELECTOR = [
+  'p', 'img', 'ul', 'ol', 'pre', 'blockquote', 'table', 'div',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+]
+  .flatMap((tag) => [`td > ${tag}`, `th > ${tag}`])
+  .join(', ')
+
 function tableNeedsRawHtml(table: HTMLElement): boolean {
   if (table.querySelector(MERGED_CELL_SELECTOR)) return true
+  if (table.querySelector(CELL_BLOCK_CONTENT_SELECTOR)) return true
   return Array.from(table.querySelectorAll('tr')).some(
     (row) => Boolean((row as HTMLElement).style?.height),
   )
@@ -66,6 +92,19 @@ function tableNeedsRawHtml(table: HTMLElement): boolean {
 turndown.addRule('tableNeedsRawHtml', {
   filter: (node) => node.nodeName === 'TABLE' && tableNeedsRawHtml(node as HTMLElement),
   replacement: (_content, node) => `\n\n${(node as HTMLElement).outerHTML}\n\n`,
+})
+
+// turndown's stock image rule emits only alt/src/title, so an image carrying a
+// width (set by the resize handles) or any other sizing attribute would lose it
+// on the first round trip. Keep such images as raw HTML — the same escape hatch
+// the table rule above uses, for the same reason.
+const SIZED_IMAGE_ATTRS = ['width', 'height', 'style', 'class']
+
+turndown.addRule('sizedImage', {
+  filter: (node) =>
+    node.nodeName === 'IMG' &&
+    SIZED_IMAGE_ATTRS.some((attr) => Boolean((node as HTMLElement).getAttribute(attr))),
+  replacement: (_content, node) => (node as HTMLElement).outerHTML,
 })
 
 /** Convert HTML to Markdown */

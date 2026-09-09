@@ -1,6 +1,34 @@
 from __future__ import annotations
 
 import io
+import re
+
+from app.utils.storage import resolve_public_url_to_path
+
+# src/href attribute whose value starts with the stored-asset URL prefix.
+_LOCAL_ASSET_SRC = re.compile(r'(src\s*=\s*)(["\'])(/uploads/[^"\']*)\2', re.IGNORECASE)
+
+
+def _inline_local_asset_urls(html: str) -> str:
+    """
+    Rewrite `/uploads/...` image sources to absolute file:// URIs.
+
+    WeasyPrint resolves a root-relative URL against the origin, so no base_url
+    can point it at STORAGE_LOCAL_PATH — without this every locally stored image
+    is simply missing from the PDF. References that do not resolve to a real
+    file inside the storage root are left untouched (see
+    resolve_public_url_to_path), so a crafted src cannot turn an export into an
+    arbitrary file read.
+    """
+
+    def replace(match: re.Match) -> str:
+        prefix, quote, url = match.group(1), match.group(2), match.group(3)
+        path = resolve_public_url_to_path(url)
+        if path is None:
+            return match.group(0)
+        return f"{prefix}{quote}{path.as_uri()}{quote}"
+
+    return _LOCAL_ASSET_SRC.sub(replace, html)
 
 
 def export_to_pdf(doc) -> bytes:
@@ -20,6 +48,8 @@ def export_to_pdf(doc) -> bytes:
 
         escaped = html_module.escape(doc.content_md or "")
         html_content = f"<pre>{escaped}</pre>"
+    else:
+        html_content = _inline_local_asset_urls(html_content)
 
     full_html = f"""<!DOCTYPE html>
 <html lang="zh">

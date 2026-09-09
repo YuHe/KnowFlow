@@ -406,6 +406,24 @@
 
   .doc-content img { @apply max-w-full rounded-lg my-4; height: auto; }
 
+  /* Images inside table cells.
+     The rule above gives every image a 1rem vertical margin, which inside a
+     cell pushes the row open and leaves the image floating away from the text
+     next to it. Cells are tight by nature, so drop the margin and let the image
+     sit on its own line. Specificity (0,1,2) also beats the `my-2` utility the
+     editor puts on the img element itself via HTMLAttributes.
+     max-width stays: the table is `table-layout: fixed`, so a column takes an
+     equal share of the width regardless of what the image asks for, and an
+     unconstrained image would otherwise overflow its cell. */
+  .doc-content td img,
+  .doc-content th img,
+  .ProseMirror td img,
+  .ProseMirror th img {
+    @apply max-w-full rounded my-0 align-top;
+    height: auto;
+    display: block;
+  }
+
   /* Mermaid diagrams */
   .doc-content [data-mermaid],
   .doc-content .mermaid-rendered {
