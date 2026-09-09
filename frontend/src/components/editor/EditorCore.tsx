@@ -601,7 +601,10 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       ) : (
         <EditorContent
           editor={editor}
-          className="prose prose-gray max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[400px]"
+          // No `prose` here: the ProseMirror element itself already carries
+          // `prose prose-gray` (see editorProps.attributes). Nesting the two
+          // made every em-based typography size compound across the two levels.
+          className="max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[400px]"
         />
       )}
     </div>

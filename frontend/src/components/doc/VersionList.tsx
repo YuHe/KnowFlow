@@ -184,7 +184,14 @@ export default function VersionList({ docId, onClose, onRestore }: VersionListPr
                     ) : (
                       <div
                         ref={previewRef}
-                        className="text-xs text-gray-700 prose prose-xs max-w-none max-h-48 overflow-y-auto"
+                        // `doc-content` so code blocks, tables and images look
+                        // the same here as in the read view — this preview used
+                        // to match neither surface and fell through to the
+                        // typography plugin's own dark code-block default.
+                        // `prose-xs` was a no-op: the plugin only ships
+                        // prose-sm/base/lg/xl/2xl, so the preview rendered at
+                        // full size inside a max-h-48 box.
+                        className="doc-content text-xs text-gray-700 prose prose-sm max-w-none max-h-48 overflow-y-auto"
                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewVersion.content_html) }}
                       />
                     )}

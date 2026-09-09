@@ -69,13 +69,21 @@ def export_to_pdf(doc) -> bytes:
   h3 {{ font-size: 1.3em; margin-top: 1.2em; }}
   h4, h5, h6 {{ font-size: 1.1em; margin-top: 1em; }}
   p {{ margin: 0.6em 0; }}
+  /* Kept in step with the --code-* variables in frontend/src/index.css so an
+     exported PDF looks like the document did on screen. */
   pre, code {{
     font-family: "Courier New", monospace;
-    background: #f5f5f5;
+    background: #f6f8fa;
+    color: #24292f;
     border-radius: 3px;
     font-size: 0.9em;
   }}
-  pre {{ padding: 0.8em; overflow-wrap: break-word; white-space: pre-wrap; }}
+  pre {{
+    padding: 0.8em;
+    border: 1px solid #d8dee4;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+  }}
   code {{ padding: 0.1em 0.3em; }}
   blockquote {{
     border-left: 4px solid #ccc;

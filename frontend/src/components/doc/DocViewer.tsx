@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { renderMermaidBlocks } from '@/utils/mermaid'
 import { attachCodeCopyButtons } from '@/utils/codeCopy'
+import { highlightCodeBlocks } from '@/utils/codeHighlight'
 import { sanitizeHtml } from '@/utils/sanitize'
 
 interface DocViewerProps {
@@ -34,6 +35,16 @@ export default function DocViewer({ content, containerRef }: DocViewerProps) {
   useEffect(() => {
     if (!containerRef.current) return
     attachCodeCopyButtons(containerRef.current)
+  }, [safeContent, containerRef])
+
+  // Syntax-highlight code blocks. The stored HTML carries only a
+  // `language-*` class — TipTap highlights with ProseMirror decorations, which
+  // are never serialized — so without this pass the read view shows code in a
+  // single flat colour. Runs after the copy buttons because both walk the same
+  // <pre> elements and this one is the more expensive of the two.
+  useEffect(() => {
+    if (!containerRef.current) return
+    highlightCodeBlocks(containerRef.current)
   }, [safeContent, containerRef])
 
   return (

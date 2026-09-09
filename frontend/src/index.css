@@ -37,6 +37,32 @@
     --color-primary: #2563EB;
     --color-primary-light: #3b82f6;
     --color-primary-dark: #1d4ed8;
+
+    /* ── Code blocks ──────────────────────────────────────────────────────
+       One source of truth for both surfaces. The editor and the read view
+       previously each hard-coded their own background — `bg-muted` (near
+       white) in .ProseMirror and `bg-gray-900` (near black) in .doc-content,
+       two hand-written rules ~170 lines apart in this file that had drifted
+       apart. Anything that wants to restyle code has to change these, not the
+       rules below. */
+    --code-bg: #f6f8fa;
+    --code-fg: #24292f;
+    --code-border: #d8dee4;
+    /* Syntax tokens. A light-background palette, contrast-checked against
+       --code-bg (all at least 4.5:1). Consumed by the .hljs-* rules at the end
+       of this file, which lowlight's class names hook into. */
+    --code-keyword: #cf222e;
+    --code-string: #0a3069;
+    --code-comment: #6e7781;
+    --code-number: #0550ae;
+    --code-function: #8250df;
+    --code-type: #953800;
+    --code-variable: #953800;
+    --code-tag: #116329;
+    --code-attr: #0550ae;
+    --code-meta: #6e7781;
+    --code-deletion-bg: #ffebe9;
+    --code-addition-bg: #dafbe1;
   }
 
   .dark {
@@ -142,6 +168,17 @@
     color: inherit;
   }
 
+  /* @tailwindcss/typography wraps inline code in literal backtick characters
+     via code::before / code::after. Nothing reset them, so `foo` rendered as
+     `` `foo` `` on both surfaces — the backticks are markdown syntax, not
+     content. (Pre-wrapped code is already exempt in the plugin.) */
+  .ProseMirror code::before,
+  .ProseMirror code::after,
+  .doc-content code::before,
+  .doc-content code::after {
+    content: none;
+  }
+
   /* Remove browser/Tailwind focus ring from the editor content area */
   .ProseMirror:focus,
   .ProseMirror:focus-visible {
@@ -196,15 +233,21 @@
   }
 
   .ProseMirror code {
-    @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
+    @apply px-1.5 py-0.5 rounded text-sm font-mono;
+    background: var(--code-bg);
+    color: var(--code-fg);
   }
 
   .ProseMirror pre {
-    @apply bg-muted p-4 rounded-lg overflow-x-auto;
+    @apply p-4 rounded-lg overflow-x-auto text-sm font-mono;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border: 1px solid var(--code-border);
   }
 
   .ProseMirror pre code {
     @apply bg-transparent p-0;
+    color: inherit;
   }
 
   .ProseMirror a {
@@ -365,14 +408,19 @@
   }
 
   .doc-content code {
-    @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-gray-800;
+    @apply px-1.5 py-0.5 rounded text-sm font-mono;
+    background: var(--code-bg);
+    color: var(--code-fg);
   }
 
   .doc-content pre {
-    @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4 text-sm font-mono;
+    @apply p-4 rounded-lg overflow-x-auto my-4 text-sm font-mono;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border: 1px solid var(--code-border);
   }
 
-  .doc-content pre code { @apply bg-transparent p-0 text-inherit; }
+  .doc-content pre code { @apply bg-transparent p-0; color: inherit; }
 
   /* Code block copy button (injected by utils/codeCopy for read views).
      The host wrapper — not the <pre> — is the positioning context, so the
@@ -384,21 +432,33 @@
 
   .doc-content .code-block-host > pre { margin: 0; }
 
+  /* Colours track the code block itself: this used to be white-on-translucent
+     for a near-black background, which is invisible now that the block is
+     light. */
   .doc-content .code-copy-btn {
     @apply absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md
-           border border-white/15 bg-white/10 text-gray-300 opacity-0 transition;
+           opacity-0 transition;
+    border: 1px solid var(--code-border);
+    background: #ffffff;
+    color: #57606a;
   }
 
   .doc-content .code-copy-btn > svg { @apply h-3.5 w-3.5; }
 
-  .doc-content .code-copy-btn:hover { @apply bg-white/20 text-white; }
+  .doc-content .code-copy-btn:hover {
+    background: #f3f4f6;
+    color: var(--code-fg);
+  }
 
   /* Revealed on hover, and always while focused so it is reachable by keyboard. */
   .doc-content .code-block-host:hover .code-copy-btn,
   .doc-content .code-copy-btn:focus-visible,
   .doc-content .code-copy-btn.is-copied { @apply opacity-100; }
 
-  .doc-content .code-copy-btn.is-copied { @apply border-green-400/40 text-green-400; }
+  .doc-content .code-copy-btn.is-copied {
+    border-color: #1a7f37;
+    color: #1a7f37;
+  }
 
   .doc-content a { @apply text-primary underline underline-offset-2 hover:text-primary/80; }
 
@@ -501,3 +561,131 @@
 .ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
+
+/* ── Syntax highlighting tokens ────────────────────────────────────────────
+   lowlight emits highlight.js class names (`hljs-keyword`, `hljs-string`, …).
+   Nothing in this project ever coloured them: no highlight.js theme was
+   imported anywhere, so every token inherited the block's text colour and code
+   rendered as one flat shade in the editor.
+
+   Written by hand rather than importing `highlight.js/styles/*.css` for two
+   reasons: those files declare `.hljs-*` at the top level with no scoping, so
+   importing one leaks the rules app-wide; and highlight.js is only a transitive
+   dependency here (package.json lists lowlight), which makes a source import
+   from it fragile.
+
+   Deliberately OUTSIDE @layer, for the same reason as the gapcursor rules
+   above: Tailwind purges layered rules whose class names never appear in the
+   scanned source, and these classes only exist at runtime — inside a layer they
+   would be silently dropped from the production stylesheet.
+
+   Scoped to the two code surfaces so the token names cannot collide with
+   anything else. Colours come from the --code-* variables in :root. */
+.ProseMirror pre code .hljs-comment,
+.ProseMirror pre code .hljs-quote,
+.doc-content pre code .hljs-comment,
+.doc-content pre code .hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.ProseMirror pre code .hljs-keyword,
+.ProseMirror pre code .hljs-selector-tag,
+.ProseMirror pre code .hljs-literal,
+.ProseMirror pre code .hljs-doctag,
+.doc-content pre code .hljs-keyword,
+.doc-content pre code .hljs-selector-tag,
+.doc-content pre code .hljs-literal,
+.doc-content pre code .hljs-doctag {
+  color: var(--code-keyword);
+}
+
+.ProseMirror pre code .hljs-string,
+.ProseMirror pre code .hljs-regexp,
+.ProseMirror pre code .hljs-addition,
+.doc-content pre code .hljs-string,
+.doc-content pre code .hljs-regexp,
+.doc-content pre code .hljs-addition {
+  color: var(--code-string);
+}
+
+.ProseMirror pre code .hljs-number,
+.ProseMirror pre code .hljs-symbol,
+.ProseMirror pre code .hljs-bullet,
+.doc-content pre code .hljs-number,
+.doc-content pre code .hljs-symbol,
+.doc-content pre code .hljs-bullet {
+  color: var(--code-number);
+}
+
+.ProseMirror pre code .hljs-title,
+.ProseMirror pre code .hljs-title.function_,
+.ProseMirror pre code .hljs-section,
+.doc-content pre code .hljs-title,
+.doc-content pre code .hljs-title.function_,
+.doc-content pre code .hljs-section {
+  color: var(--code-function);
+}
+
+.ProseMirror pre code .hljs-type,
+.ProseMirror pre code .hljs-class .hljs-title,
+.ProseMirror pre code .hljs-title.class_,
+.ProseMirror pre code .hljs-built_in,
+.doc-content pre code .hljs-type,
+.doc-content pre code .hljs-class .hljs-title,
+.doc-content pre code .hljs-title.class_,
+.doc-content pre code .hljs-built_in {
+  color: var(--code-type);
+}
+
+.ProseMirror pre code .hljs-variable,
+.ProseMirror pre code .hljs-template-variable,
+.ProseMirror pre code .hljs-params,
+.doc-content pre code .hljs-variable,
+.doc-content pre code .hljs-template-variable,
+.doc-content pre code .hljs-params {
+  color: var(--code-variable);
+}
+
+.ProseMirror pre code .hljs-name,
+.ProseMirror pre code .hljs-tag,
+.doc-content pre code .hljs-name,
+.doc-content pre code .hljs-tag {
+  color: var(--code-tag);
+}
+
+.ProseMirror pre code .hljs-attr,
+.ProseMirror pre code .hljs-attribute,
+.ProseMirror pre code .hljs-property,
+.ProseMirror pre code .hljs-selector-attr,
+.ProseMirror pre code .hljs-selector-class,
+.ProseMirror pre code .hljs-selector-id,
+.doc-content pre code .hljs-attr,
+.doc-content pre code .hljs-attribute,
+.doc-content pre code .hljs-property,
+.doc-content pre code .hljs-selector-attr,
+.doc-content pre code .hljs-selector-class,
+.doc-content pre code .hljs-selector-id {
+  color: var(--code-attr);
+}
+
+.ProseMirror pre code .hljs-meta,
+.doc-content pre code .hljs-meta {
+  color: var(--code-meta);
+}
+
+.ProseMirror pre code .hljs-deletion,
+.doc-content pre code .hljs-deletion {
+  background: var(--code-deletion-bg);
+}
+
+.ProseMirror pre code .hljs-addition,
+.doc-content pre code .hljs-addition {
+  background: var(--code-addition-bg);
+}
+
+.ProseMirror pre code .hljs-emphasis,
+.doc-content pre code .hljs-emphasis { font-style: italic; }
+
+.ProseMirror pre code .hljs-strong,
+.doc-content pre code .hljs-strong { font-weight: 600; }
