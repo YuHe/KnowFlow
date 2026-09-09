@@ -1,7 +1,7 @@
 import Image from '@tiptap/extension-image'
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Image node view with drag-to-resize handles.
@@ -12,6 +12,14 @@ import { useRef } from 'react'
  */
 function ImageNodeView({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const imgRef = useRef<HTMLImageElement>(null)
+  // Width while dragging. Kept in React state rather than in the document:
+  // updateAttributes dispatches a real ProseMirror transaction, and one per
+  // mousemove means a full editor.getHTML() serialization plus a re-render of
+  // every node view in the document, ~60-120 times a second, with an undo entry
+  // for each. The document is written once, on mouseup. This mirrors what
+  // TableRowHeight already does for row-height drags.
+  const [previewWidth, setPreviewWidth] = useState<number | null>(null)
+  const teardownRef = useRef<(() => void) | null>(null)
   const { src, alt, title, width } = node.attrs as {
     src: string
     alt?: string
@@ -20,28 +28,51 @@ function ImageNodeView({ node, updateAttributes, selected, editor }: NodeViewPro
   }
   const editable = editor.isEditable
 
+  // The node view can unmount mid-drag (an autosave-driven re-render is enough),
+  // which would otherwise leave the window listeners attached forever.
+  useEffect(() => () => teardownRef.current?.(), [])
+
   const startResize = (e: React.MouseEvent, side: 'left' | 'right') => {
     e.preventDefault()
     e.stopPropagation()
+    const img = imgRef.current
+    if (!img) return
+
     const startX = e.clientX
-    const startWidth = imgRef.current?.offsetWidth ?? 0
+    const startWidth = img.offsetWidth
     const dir = side === 'left' ? -1 : 1
+    // An ancestor may carry a CSS zoom (the editor page has a zoom control), so
+    // pointer deltas are in screen pixels while offsetWidth is in layout pixels.
+    // Deriving the factor from the rendered box covers zoom and transforms alike.
+    const rect = img.getBoundingClientRect()
+    const scale = startWidth > 0 && rect.width > 0 ? rect.width / startWidth : 1
+
+    let latest = startWidth
 
     const onMove = (ev: MouseEvent) => {
-      const delta = (ev.clientX - startX) * dir
-      const newWidth = Math.max(40, Math.round(startWidth + delta))
-      updateAttributes({ width: newWidth })
+      const delta = ((ev.clientX - startX) * dir) / scale
+      latest = Math.max(40, Math.round(startWidth + delta))
+      setPreviewWidth(latest)
     }
-    const onUp = () => {
+    const teardown = () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      teardownRef.current = null
     }
+    const onUp = () => {
+      teardown()
+      setPreviewWidth(null)
+      if (latest !== width) updateAttributes({ width: latest })
+    }
+
+    teardownRef.current = teardown
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
 
   const handleClass =
     'absolute w-2.5 h-2.5 bg-indigo-500 border border-white rounded-sm cursor-ew-resize'
+  const shownWidth = previewWidth ?? width
 
   return (
     <NodeViewWrapper
@@ -55,7 +86,7 @@ function ImageNodeView({ node, updateAttributes, selected, editor }: NodeViewPro
         alt={alt}
         title={title}
         draggable={false}
-        style={{ width: width ? `${width}px` : undefined, maxWidth: '100%', height: 'auto' }}
+        style={{ width: shownWidth ? `${shownWidth}px` : undefined, maxWidth: '100%', height: 'auto' }}
         className={`rounded-lg ${selected ? 'ring-2 ring-indigo-400' : ''}`}
       />
       {editable && selected && (

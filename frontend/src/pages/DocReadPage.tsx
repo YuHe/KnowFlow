@@ -277,9 +277,9 @@ const DocReadPage: React.FC = () => {
   });
 
   const handleEditorUpdate = useCallback(
-    (html: string, wc: number) => {
+    (getHtml: () => string, wc: number) => {
       setWordCount(wc);
-      triggerSave(html);
+      triggerSave(getHtml);
     },
     [triggerSave],
   );

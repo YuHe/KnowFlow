@@ -53,7 +53,11 @@ services:
       SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
       STORAGE_LOCAL_PATH: /app/uploads
-      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-104857600}
+      # Names must match app/config.py exactly: Settings uses extra="ignore", so
+      # a misspelled key is silently discarded and the default applies. This was
+      # previously MAX_UPLOAD_SIZE=104857600, which did nothing at all.
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-100}
+      IMAGE_MAX_SIZE_MB: ${IMAGE_MAX_SIZE_MB:-10}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8192,https://ku.ihope.cc}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       # WARNING keeps production logs small; set LOG_LEVEL=INFO in .env to

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
+import type { Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Highlight from '@tiptap/extension-highlight'
 import Underline from '@tiptap/extension-underline'
@@ -7,6 +8,7 @@ import Link from '@tiptap/extension-link'
 import { ResizableImage } from './ResizableImage'
 import Table from '@tiptap/extension-table'
 import { ResizableTableRow } from './TableRowHeight'
+import { TrailingNode } from './TrailingNode'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
@@ -23,6 +25,8 @@ import TurndownService from 'turndown'
 import * as turndownPluginGfm from 'turndown-plugin-gfm'
 import { uploadImage } from '../../api/upload'
 import { markdownToHtml } from '../../utils/markdown'
+import { downscaleImage, dataUrlToFile } from '../../utils/imageCompress'
+import { getApiErrorCode, getApiErrorMessage } from '@/utils'
 import { localizeRemoteImages, type FailedImage } from '../../utils/remoteImages'
 import { toast } from '@/components/ui/use-toast'
 import { saveDraft, clearDraft } from '@/utils/crashReport'
@@ -176,7 +180,7 @@ interface EditorCoreProps {
   kbId: string
   docId?: string
   onEditorReady: (editor: any) => void
-  onUpdate: (html: string, wordCount: number) => void
+  onUpdate: (getHtml: () => string, wordCount: number) => void
   editable?: boolean
   sourceMode?: boolean
 }
@@ -192,20 +196,91 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   // them so orphaned assets aren't created for a document the user left.
   const mdAbortRef = useRef<AbortController | null>(null)
   const [sourceContent, setSourceContent] = useState('')
+  // Pasted images upload before they can be inserted; without an indicator the
+  // paste looks like it did nothing at all.
+  const [uploadingImage, setUploadingImage] = useState(false)
+  // handlePaste lives inside the useEditor config, so it cannot close over the
+  // editor it is configuring.
+  const editorRef = useRef<Editor | null>(null)
 
   useEffect(() => {
     return () => mdAbortRef.current?.abort()
   }, [])
 
-  const handleImageUpload = async (file: File): Promise<string | null> => {
-    if (!file.type.startsWith('image/')) return null
+  const handleImageUpload = useCallback(
+    async (file: File): Promise<string | null> => {
+      if (!file.type.startsWith('image/')) return null
+      try {
+        // Shrink first: the server rejects images over IMAGE_MAX_SIZE_MB, and a
+        // screenshot straight off a Retina display often exceeds it.
+        const prepared = await downscaleImage(file)
+        return await uploadImage(kbId, prepared)
+      } catch (err) {
+        // Previously `catch { return null }` — a rejected upload produced no
+        // node, no message and no console line, so the paste appeared to be
+        // swallowed. Past the 10MB image cap that was the whole user experience.
+        const code = getApiErrorCode(err)
+        const reason =
+          code === 'IMAGE_TOO_LARGE' || code === 'FILE_TOO_LARGE'
+            ? '图片超过服务端大小限制'
+            : getApiErrorMessage(err, '请检查网络后重试')
+        toast({ title: '图片上传失败', description: reason, variant: 'destructive' })
+        return null
+      }
+    },
+    [kbId],
+  )
+
+  /**
+   * Replace every `data:` image already in the document with an uploaded asset.
+   *
+   * `allowBase64` stays enabled so documents that already contain inline images
+   * keep rendering them — turning it off would make TipTap drop those nodes on
+   * load and the next autosave would persist the loss. Instead new ones are
+   * converted on the way in: a data URL in the document is re-serialized in full
+   * on every save, into both content_html and content_md, which is what makes
+   * the editor crawl after pasting a screenshot-bearing page.
+   */
+  const uploadInlinedImages = useCallback(async () => {
+    const editor = editorRef.current
+    if (!editor || editor.isDestroyed) return
+
+    const inlined: { pos: number; src: string }[] = []
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'image' && String(node.attrs.src || '').startsWith('data:')) {
+        inlined.push({ pos, src: node.attrs.src })
+      }
+    })
+    if (inlined.length === 0) return
+
+    setUploadingImage(true)
     try {
-      const res = await uploadImage(kbId, file)
-      return res
-    } catch {
-      return null
+      for (const { src } of inlined) {
+        const file = await dataUrlToFile(src)
+        if (!file) continue
+        const url = await handleImageUpload(file)
+        if (!url) continue
+        const live = editorRef.current
+        if (!live || live.isDestroyed) return
+        // Re-locate by src rather than trusting the original position: earlier
+        // uploads in this loop have already changed the document.
+        const tr = live.state.tr
+        let found = false
+        live.state.doc.descendants((node, pos) => {
+          if (found) return false
+          if (node.type.name === 'image' && node.attrs.src === src) {
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: url })
+            found = true
+            return false
+          }
+          return true
+        })
+        if (found) live.view.dispatch(tr)
+      }
+    } finally {
+      setUploadingImage(false)
     }
-  }
+  }, [kbId])
 
   const editor = useEditor({
     extensions: [
@@ -217,6 +292,11 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
         HTMLAttributes: { class: 'text-indigo-600 underline hover:text-indigo-800' },
       }),
       ResizableImage.configure({
+        // Deliberately left on. Nothing in the app produces a data URL, so this
+        // only affects *parsing*: with it off, TipTap would drop every inline
+        // image already stored in an existing document and the next autosave
+        // would persist that loss. New ones are converted to uploads instead —
+        // see uploadInlinedImages.
         allowBase64: true,
         HTMLAttributes: { class: 'max-w-full rounded-lg my-2' },
       }),
@@ -233,12 +313,19 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       Color,
       FontSize,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      // Keeps a paragraph after a trailing block node so the caret always has
+      // somewhere to go after pasting an image at the end of the document.
+      TrailingNode,
     ],
     content,
     editable: editable && !sourceMode,
     onUpdate: ({ editor }) => {
       const wordCount = editor.storage.characterCount.characters()
-      onUpdate(editor.getHTML(), wordCount)
+      // Pass a getter, not the serialized HTML: this fires on every transaction
+      // (including every keystroke and, before the resize fix, every mousemove
+      // of an image drag), while only the debounced save ever needs the string.
+      // Serializing eagerly meant a full document serialization per keystroke.
+      onUpdate(() => editor.getHTML(), wordCount)
     },
     editorProps: {
       attributes: {
@@ -253,17 +340,31 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
           event.preventDefault()
           const file = imageItem.getAsFile()
           if (file) {
-            handleImageUpload(file).then((url) => {
-              if (url) {
+            setUploadingImage(true)
+            handleImageUpload(file)
+              .then((url) => {
+                // The view can be torn down while the upload is in flight (the
+                // user leaves edit mode); dispatching into a dead view throws.
+                if (!url || view.isDestroyed) return
                 view.dispatch(
                   view.state.tr.replaceSelectionWith(
                     view.state.schema.nodes.image.create({ src: url })
                   )
                 )
-              }
-            })
+              })
+              .finally(() => setUploadingImage(false))
           }
           return true
+        }
+
+        // Clipboard HTML carrying data: URLs (e.g. copied from another editor).
+        // Let ProseMirror parse it normally, then swap each inline payload for an
+        // uploaded asset: a data URL left in the document is re-serialized on
+        // every save, in both content_html and content_md.
+        const htmlItem = event.clipboardData?.getData('text/html') || ''
+        if (htmlItem.includes('src="data:image/') || htmlItem.includes("src='data:image/")) {
+          setTimeout(() => uploadInlinedImages(), 0)
+          return false
         }
 
         // Handle markdown paste detection
@@ -281,15 +382,17 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
           const file = event.dataTransfer.files[0]
           if (file?.type.startsWith('image/')) {
             event.preventDefault()
-            const { schema } = view.state
             const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
-            handleImageUpload(file).then((url) => {
-              if (url && coordinates) {
-                const node = schema.nodes.image.create({ src: url })
-                const transaction = view.state.tr.insert(coordinates.pos, node)
-                view.dispatch(transaction)
-              }
-            })
+            setUploadingImage(true)
+            handleImageUpload(file)
+              .then((url) => {
+                if (!url || !coordinates || view.isDestroyed) return
+                const node = view.state.schema.nodes.image.create({ src: url })
+                // Clamp: the document may have changed while the upload ran.
+                const pos = Math.min(coordinates.pos, view.state.doc.content.size)
+                view.dispatch(view.state.tr.insert(pos, node))
+              })
+              .finally(() => setUploadingImage(false))
             return true
           }
         }
@@ -299,6 +402,7 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   })
 
   useEffect(() => {
+    editorRef.current = editor ?? null
     if (editor) {
       onEditorReady(editor)
     }
@@ -413,6 +517,21 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   return (
     <div className="relative">
       <FailedImagesNotice images={mdFailures} onDismiss={() => setMdFailures([])} />
+      {/* Pasted/dropped images upload before they can be inserted. Without this
+          the paste looks like it silently did nothing. */}
+      {uploadingImage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-3 flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-700"
+        >
+          <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          图片上传中…
+        </div>
+      )}
       {/* Markdown paste prompt banner */}
       {mdPrompt && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">
@@ -475,7 +594,7 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
             // Convert Markdown → HTML before passing to onUpdate so auto-save
             // gets correct HTML. Mermaid is kept as a code block; the read view
             // renders it (renderMermaidBlocks handles language-mermaid).
-            onUpdate(markdownToHtml(md, false), md.length)
+            onUpdate(() => markdownToHtml(md, false), md.length)
           }}
           spellCheck={false}
         />

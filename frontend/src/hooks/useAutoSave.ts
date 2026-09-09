@@ -2,6 +2,19 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'unsaved';
 
+/**
+ * Content to save, or a function producing it.
+ *
+ * The lazy form exists so the editor does not have to serialize the whole
+ * document on every keystroke: `editor.getHTML()` is a full DOM serialization,
+ * and with a large document (or an image inlined as a data URL) that ran once
+ * per transaction while only the debounced save ever consumed the result.
+ */
+export type SaveContent = string | (() => string);
+
+const resolveContent = (content: SaveContent): string =>
+  typeof content === 'function' ? content() : content;
+
 interface UseAutoSaveOptions {
   onSave: (content: string, createVersion?: boolean) => Promise<void>;
   onManualSave?: (content: string) => Promise<void>;
@@ -17,19 +30,20 @@ export function useAutoSave({
 }: UseAutoSaveOptions) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingContentRef = useRef<string | null>(null);
+  const pendingContentRef = useRef<SaveContent | null>(null);
   const isSavingRef = useRef(false);
 
   const doSave = useCallback(
-    async (content: string, createVersion = false) => {
+    async (content: SaveContent, createVersion = false) => {
       if (isSavingRef.current && !createVersion) return;  // only skip for auto-save, not manual
       isSavingRef.current = true;
       setSaveStatus('saving');
       try {
+        const html = resolveContent(content);
         if (createVersion && onManualSave) {
-          await onManualSave(content);
+          await onManualSave(html);
         } else {
-          await onSave(content, createVersion);
+          await onSave(html, createVersion);
         }
         setSaveStatus('saved');
         pendingContentRef.current = null;
@@ -45,7 +59,7 @@ export function useAutoSave({
 
   // Debounced auto-save (does NOT create version)
   const triggerSave = useCallback(
-    (content: string) => {
+    (content: SaveContent) => {
       setSaveStatus('unsaved');
       pendingContentRef.current = content;
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -58,7 +72,7 @@ export function useAutoSave({
 
   // Manual save: creates a version snapshot
   const triggerManualSave = useCallback(
-    async (content: string) => {
+    async (content: SaveContent) => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       await doSave(content, true);
     },
@@ -67,7 +81,7 @@ export function useAutoSave({
 
   // Force-save without creating version (e.g., before unload)
   const forceSave = useCallback(
-    async (content: string) => {
+    async (content: SaveContent) => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       await doSave(content, false);
     },

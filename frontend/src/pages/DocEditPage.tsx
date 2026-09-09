@@ -88,10 +88,10 @@ const DocEditPage: React.FC = () => {
   });
 
   const handleEditorUpdate = useCallback(
-    (html: string, wc: number) => {
+    (getHtml: () => string, wc: number) => {
       setWordCount(wc);
       markDirty();
-      triggerSave(html);
+      triggerSave(getHtml);
     },
     [markDirty, triggerSave]
   );

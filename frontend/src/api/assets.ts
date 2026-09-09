@@ -8,6 +8,7 @@ export const assetsApi = {
       kb_id?: string
       doc_id?: string
       onUploadProgress?: (progress: number) => void
+      signal?: AbortSignal
     },
   ): Promise<Asset> => {
     const formData = new FormData()
@@ -17,6 +18,12 @@ export const assetsApi = {
 
     const response = await apiClient.post<ApiResponse<Asset>>('/assets/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      // axios' XHR timeout covers the upload itself, not just the wait for a
+      // response, so the client-wide 30s would abort a large image mid-transfer
+      // on a slow uplink — and the caller could not tell that apart from a
+      // network error. Give the body time to go out.
+      timeout: 120000,
+      signal: options?.signal,
       onUploadProgress: (progressEvent) => {
         if (options?.onUploadProgress && progressEvent.total) {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
