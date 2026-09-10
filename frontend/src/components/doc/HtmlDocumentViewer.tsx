@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { sanitizeHtml } from '@/utils/sanitize'
 
 /**
@@ -28,26 +28,48 @@ interface HtmlDocumentViewerProps {
 export default function HtmlDocumentViewer({ html, className }: HtmlDocumentViewerProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const shadowRef = useRef<ShadowRoot | null>(null)
+  const [isolationFailed, setIsolationFailed] = useState(false)
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
 
-    // attachShadow throws if called twice on the same element, and React may
-    // re-run this effect for the same host.
+    // attachShadow throws if the element already has a shadow root, which can
+    // happen when React reuses a DOM node across a remount. Re-read it in that
+    // case rather than giving up.
+    if (!shadowRef.current) {
+      shadowRef.current = host.shadowRoot
+    }
     if (!shadowRef.current) {
       try {
         shadowRef.current = host.attachShadow({ mode: 'open' })
       } catch {
-        // Already attached (fast refresh), or unsupported. Fall back to the host
-        // itself: the report still renders, it just is not style-isolated.
         shadowRef.current = null
       }
     }
 
-    const target: ShadowRoot | HTMLElement = shadowRef.current ?? host
-    target.innerHTML = sanitizeHtml(html)
+    if (!shadowRef.current) {
+      // Deliberately render nothing rather than falling back to the light DOM.
+      // The report's <style> uses global selectors, so injecting it into the page
+      // would restyle the whole application — a far worse outcome than showing a
+      // notice. An earlier version of this component did exactly that.
+      setIsolationFailed(true)
+      return
+    }
+
+    setIsolationFailed(false)
+    shadowRef.current.innerHTML = sanitizeHtml(html)
   }, [html])
 
-  return <div ref={hostRef} className={className} data-html-document="true" />
+  return (
+    <>
+      <div ref={hostRef} className={className} data-html-document="true" />
+      {isolationFailed && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          当前浏览器无法为 HTML 文档创建样式隔离容器，为避免其样式影响整个页面，已暂停渲染。
+          请切换到「源码」查看内容。
+        </div>
+      )}
+    </>
+  )
 }

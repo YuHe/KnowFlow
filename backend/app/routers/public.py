@@ -149,6 +149,8 @@ async def public_doc(
             "title": doc.title,
             "content_md": doc.content_md,
             "content_html": doc.content_html,
+            # The viewer needs this to isolate an HTML report in a shadow root.
+            "content_format": doc.content_format,
             "word_count": doc.word_count,
             "section_id": str(doc.section_id) if doc.section_id else None,
             "created_at": doc.created_at.isoformat(),
@@ -221,6 +223,8 @@ async def access_share(
             "title": doc.title,
             "content_md": doc.content_md,
             "content_html": doc.content_html,
+            # The viewer needs this to isolate an HTML report in a shadow root.
+            "content_format": doc.content_format,
             "word_count": doc.word_count,
             "created_by_user": _user_dict(doc.creator),
             "updated_by_user": _user_dict(doc.updater),

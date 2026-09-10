@@ -735,7 +735,7 @@ const DocReadPage: React.FC = () => {
               {isHtmlDoc ? (
                 <HtmlDocumentViewer html={content} />
               ) : (
-                <DocViewer content={content} containerRef={contentRef} />
+                <DocViewer content={content} containerRef={contentRef} format="richtext" />
               )}
             </div>
           </div>

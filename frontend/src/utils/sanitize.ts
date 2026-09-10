@@ -56,7 +56,46 @@ const config: Config = {
   FORCE_BODY: true,
 }
 
-/** Sanitize an HTML string for safe DOM insertion. */
+/**
+ * Sanitize an HTML string for safe DOM insertion.
+ *
+ * Keeps `<style>` — required both by mermaid's inline SVG and by a standalone
+ * HTML document rendered in a shadow root. Use this ONLY where the result is
+ * style-isolated; anywhere it lands in the page's own DOM, use
+ * `sanitizeForLightDom` instead.
+ */
 export function sanitizeHtml(html: string): string {
   return DOMPurify.sanitize(html, config)
+}
+
+/** Elements that restyle or re-target the whole page from wherever they sit. */
+const PAGE_SCOPED_TAGS = ['style', 'link', 'base', 'meta']
+
+/**
+ * Sanitize for insertion into the application's own DOM.
+ *
+ * A `<style>` element applies to the entire document no matter how deeply it is
+ * nested, so a stored HTML report — whose CSS is written with global selectors
+ * like `body`, `h1`, `.card` — restyles the whole application the moment it is
+ * injected into the page. Rendering such a document belongs in
+ * HtmlDocumentViewer, which isolates it in a shadow root; this function is the
+ * backstop for every other consumer, so forgetting the distinction degrades the
+ * report's appearance instead of breaking the app.
+ *
+ * mermaid is the reason this is a filter rather than a blanket ban: its
+ * generated SVG carries a `<style>` element, scoped by an id selector. Those are
+ * kept; anything outside an `<svg>` is dropped.
+ */
+export function sanitizeForLightDom(html: string): string {
+  const clean = DOMPurify.sanitize(html, config)
+  if (!clean.includes('<')) return clean
+
+  const doc = new DOMParser().parseFromString(clean, 'text/html')
+  for (const tag of PAGE_SCOPED_TAGS) {
+    for (const el of Array.from(doc.body.querySelectorAll(tag))) {
+      if (tag === 'style' && el.closest('svg')) continue
+      el.remove()
+    }
+  }
+  return doc.body.innerHTML
 }

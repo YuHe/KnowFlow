@@ -25,7 +25,7 @@ const PublicKbPage: React.FC = () => {
   const { kbSlug } = useParams<{ kbSlug: string }>();
   const [kb, setKb] = useState<PublicKbData | null>(null);
   const [docs, setDocs] = useState<PublicDocItem[]>([]);
-  const [selectedDoc, setSelectedDoc] = useState<{ title: string; content_html: string } | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<{ title: string; content_html: string; content_format: 'richtext' | 'html' } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -54,13 +54,13 @@ const PublicKbPage: React.FC = () => {
   const loadDoc = async (docId: string) => {
     if (!kbSlug) return;
     try {
-      const res = await apiClient.get<{ success: boolean; data: { title: string; content_html: string; content_md: string } }>(
+      const res = await apiClient.get<{ success: boolean; data: { title: string; content_html: string; content_md: string; content_format?: 'richtext' | 'html' } }>(
         `/public/kb/${kbSlug}/docs/${docId}`
       );
       const doc = res.data.data;
       // Fallback: render content_md as markdown when content_html is absent.
       const html = doc.content_html || (doc.content_md ? markdownToHtml(doc.content_md) : '');
-      setSelectedDoc({ title: doc.title, content_html: html });
+      setSelectedDoc({ title: doc.title, content_html: html, content_format: doc.content_format ?? 'richtext' });
     } catch {
       setSelectedDoc(null);
     }
@@ -137,7 +137,7 @@ const PublicKbPage: React.FC = () => {
               <hr className="border-gray-200 mb-6" />
               {/* Shared with the authenticated read view so mermaid rendering,
                   heading anchors and code-block copy buttons stay identical. */}
-              <DocViewer content={selectedDoc.content_html} containerRef={contentRef} />
+              <DocViewer content={selectedDoc.content_html} containerRef={contentRef} format={selectedDoc.content_format} />
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">

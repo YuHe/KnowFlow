@@ -5,7 +5,7 @@ import type { DocumentVersion, DocumentVersionDetail } from '@/types'
 import { Spinner } from '@/components/ui/spinner'
 import { formatDate } from '@/utils'
 import { toast } from '@/components/ui/use-toast'
-import { sanitizeHtml } from '@/utils/sanitize'
+import { sanitizeForLightDom } from '@/utils/sanitize'
 import { renderMermaidBlocks } from '@/utils/mermaid'
 
 interface VersionListProps {
@@ -192,7 +192,12 @@ export default function VersionList({ docId, onClose, onRestore }: VersionListPr
                         // prose-sm/base/lg/xl/2xl, so the preview rendered at
                         // full size inside a max-h-48 box.
                         className="doc-content text-xs text-gray-700 prose prose-sm max-w-none max-h-48 overflow-y-auto"
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewVersion.content_html) }}
+                        // `sanitizeForLightDom`, not `sanitizeHtml`: this injects
+                        // into the page's DOM, and a version of an HTML report
+                        // carries a <style> block written with global selectors
+                        // that would restyle the whole application from inside
+                        // this small preview.
+                        dangerouslySetInnerHTML={{ __html: sanitizeForLightDom(previewVersion.content_html) }}
                       />
                     )}
                     <button

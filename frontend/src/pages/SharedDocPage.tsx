@@ -6,6 +6,8 @@ import logoUrl from '@/assets/logo.png'
 import DocViewer from '@/components/doc/DocViewer'
 
 interface SharedDocData {
+  /** Rich text unless the document is a standalone HTML report. */
+  content_format?: 'richtext' | 'html'
   title: string
   content_html: string
   content_md: string
@@ -302,6 +304,7 @@ const SharedDocPage: React.FC = () => {
         <DocViewer
           content={doc.content_html || (doc.content_md ? markdownToHtml(doc.content_md) : '')}
           containerRef={contentRef}
+          format={doc.content_format ?? 'richtext'}
         />
       </div>
 

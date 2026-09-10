@@ -1,5 +1,5 @@
 import { marked, Marked, type Tokens } from 'marked'
-import { sanitizeHtml } from './sanitize'
+import { sanitizeForLightDom } from './sanitize'
 
 /**
  * Inline `==highlight==` → <mark>. Not part of core GFM but emitted by our
@@ -62,7 +62,12 @@ export function markdownToHtml(md: string, mermaidAsPlaceholder = true): string 
     instance.use({ renderer: createRenderer(false), extensions: [highlightExtension] })
     html = instance.parse(md) as string
   }
-  return sanitizeHtml(html)
+  // Light-DOM variant: the result is inserted into the editor or the read view,
+  // both of which live in the page's own DOM. A raw <style> block in markdown
+  // would otherwise restyle the whole application. mermaid is unaffected —
+  // its SVG (which does carry a scoped <style>) is produced later by
+  // renderMermaidBlocks, not here.
+  return sanitizeForLightDom(html)
 }
 
 export { marked }
