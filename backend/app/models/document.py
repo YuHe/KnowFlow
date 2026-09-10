@@ -169,6 +169,21 @@ class Document(Base):
     content_html: Mapped[str] = mapped_column(
         Text, nullable=False, default="", server_default=""
     )
+    # How content_html should be interpreted, and which editor owns the document.
+    #
+    #   "richtext" — the TipTap path. content_md and content_html are two
+    #                projections of one ProseMirror document and must round-trip;
+    #                every save re-derives the markdown.
+    #   "html"     — a standalone HTML document (e.g. an LLM-generated report).
+    #                content_html is authoritative and must NOT be passed through
+    #                the markdown round trip, which would destroy its layout.
+    #                content_md then holds a plain-text extraction, for search
+    #                only.
+    #
+    # Existing rows default to "richtext", so behaviour is unchanged for them.
+    content_format: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="richtext", server_default="richtext"
+    )
     is_public: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )

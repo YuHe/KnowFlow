@@ -12,6 +12,10 @@ import EditorCore from '@/components/editor/EditorCore';
 import EditorToolbar from '@/components/editor/EditorToolbar';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import DocViewer from '@/components/doc/DocViewer';
+import HtmlDocumentViewer from '@/components/doc/HtmlDocumentViewer';
+import HtmlDocumentEditor from '@/components/doc/HtmlDocumentEditor';
+import HtmlDocumentToolbar from '@/components/doc/HtmlDocumentToolbar';
+import { htmlToPlainText } from '@/utils/htmlDocument';
 import OutlinePanel from '@/components/doc/OutlinePanel';
 import CommentPanel from '@/components/doc/CommentPanel';
 import SharePanel from '@/components/doc/SharePanel';
@@ -19,7 +23,7 @@ import VersionList from '@/components/doc/VersionList';
 import ExportMenu from '@/components/doc/ExportMenu';
 import { ROLE_LEVELS } from '@/types';
 import { toast } from '@/components/ui/use-toast';
-import { copyToClipboard } from '@/utils';
+import { copyToClipboard, getApiErrorMessage } from '@/utils';
 import { useTreeStore } from '@/store/treeStore';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { saveDraft, loadDraft, clearDraft, type Draft } from '@/utils/crashReport';
@@ -67,6 +71,10 @@ const DocReadPage: React.FC = () => {
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [zoom, setZoom] = useState(100);
   const [sourceMode, setSourceMode] = useState(false);
+  // A standalone HTML document (an LLM report) is edited as source and rendered
+  // in a shadow root, not through TipTap — its markup must not go through the
+  // markdown round trip. See ContentFormat.
+  const isHtmlDoc = currentDoc?.content_format === 'html';
   // A draft newer than the server's copy, offered for recovery on entering edit.
   const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
   const titleRef = useRef(title);
@@ -75,6 +83,9 @@ const DocReadPage: React.FC = () => {
   const lastSavedHtmlRef = useRef('');
   // Ref to editorInstance for use in effects without stale closure
   const editorInstanceRef = useRef<Editor | null>(null);
+  // Latest content getter handed over by whichever editing surface is active.
+  // The HTML-document surface has no TipTap instance to read from.
+  const latestHtmlRef = useRef<(() => string) | null>(null);
   // Track previous docId to detect when user navigates to a different doc
   const prevDocIdRef = useRef<string | undefined>(undefined);
 
@@ -203,6 +214,21 @@ const DocReadPage: React.FC = () => {
   }, [kbId, docId, fetchDoc]);
 
   /**
+   * The searchable/plain projection of the editor's HTML.
+   *
+   * A rich-text document derives real markdown — content_md is a full
+   * projection that must round-trip. An HTML document must NOT: turndown would
+   * flatten the report's layout, and the result would be written back as its
+   * source of truth on the next load. It gets a plain-text extraction instead,
+   * which exists only so backend full-text search (which reads content_md) can
+   * still find the document.
+   */
+  const derivePlainText = useCallback(
+    (html: string): string => (isHtmlDoc ? htmlToPlainText(html) : htmlToMarkdown(html)),
+    [isHtmlDoc],
+  );
+
+  /**
    * Guard against saving an empty editor over non-empty stored content.
    *
    * A crash or a mid-render teardown can leave the editor momentarily empty,
@@ -211,12 +237,12 @@ const DocReadPage: React.FC = () => {
    */
   const isDestructiveSave = useCallback(
     (html: string): boolean => {
-      const plain = htmlToMarkdown(html).trim();
+      const plain = derivePlainText(html).trim();
       if (plain.length > 0) return false;
       const storedLen = (currentDoc?.content_md || '').trim().length;
       return storedLen > 0;
     },
-    [currentDoc],
+    [currentDoc, derivePlainText],
   );
 
   // Auto-save (no version snapshot)
@@ -227,17 +253,17 @@ const DocReadPage: React.FC = () => {
         console.warn('[AutoSave] refused to save empty content over existing content');
         return;
       }
-      const md = htmlToMarkdown(html);
+      const plain = derivePlainText(html);
       await docsApi.updateDoc(docId, {
         title: titleRef.current,
         content_html: html,
-        content_md: md,
-        word_count: md.length,
+        content_md: plain,
+        word_count: plain.length,
         is_manual_save: false,
       });
       useTreeStore.getState().updateDoc(docId, { title: titleRef.current });
     },
-    [docId, kbId, isDestructiveSave],
+    [docId, kbId, isDestructiveSave, derivePlainText],
   );
 
   // Manual save (creates version snapshot)
@@ -256,29 +282,83 @@ const DocReadPage: React.FC = () => {
         });
         return;
       }
-      const md = htmlToMarkdown(html);
+      const plain = derivePlainText(html);
       await docsApi.updateDoc(docId, {
         title: titleRef.current,
         content_html: html,
-        content_md: md,
-        word_count: md.length,
+        content_md: plain,
+        word_count: plain.length,
         is_manual_save: true,
       });
       lastSavedHtmlRef.current = html;
       useTreeStore.getState().updateDoc(docId, { title: titleRef.current });
     },
-    [docId, kbId, isDestructiveSave],
+    [docId, kbId, isDestructiveSave, derivePlainText],
   );
+
+  /**
+   * Current editor content, whichever surface is active.
+   *
+   * An HTML document has no TipTap instance, so `editorInstance.getHTML()` is
+   * not available for Ctrl+S / 保存版本; the last getter handed over by
+   * onUpdate is used instead. Falls back to the stored HTML when nothing has
+   * been edited yet, so saving an untouched document is not a no-op.
+   */
+  const currentEditorHtml = useCallback((): string => {
+    if (editorInstanceRef.current) return editorInstanceRef.current.getHTML();
+    if (latestHtmlRef.current) return latestHtmlRef.current();
+    return currentDoc?.content_html || '';
+  }, [currentDoc]);
 
   const { saveStatus, triggerSave, triggerManualSave } = useAutoSave({
     onSave: handleAutoSave,
     onManualSave: handleManualSave,
     editor: editorInstance,
+    getContent: currentEditorHtml,
   });
+
+  /**
+   * Adopt a pasted HTML document as this document's content, switching its
+   * format so it is rendered and edited as HTML from now on.
+   *
+   * Only reachable from an empty document (the editor gates the offer), because
+   * the two formats have incompatible save contracts and a document cannot be
+   * half of each. content_md gets a plain-text extraction so backend full-text
+   * search — which reads that column — can still find the document.
+   */
+  const handleUseAsHtmlDocument = useCallback(
+    async (html: string) => {
+      if (!docId || !kbId) return;
+      const plain = htmlToPlainText(html);
+      try {
+        await docsApi.updateDoc(docId, {
+          title: titleRef.current,
+          content_html: html,
+          content_md: plain,
+          content_format: 'html',
+          word_count: plain.length,
+          is_manual_save: true,
+        });
+        latestHtmlRef.current = () => html;
+        lastSavedHtmlRef.current = html;
+        await fetchDoc(kbId, docId);
+        setSourceMode(false);
+        toast({ title: '已作为 HTML 文档保存', description: '格式与配色按原样渲染；如需修改内容，切换到「源码」' });
+      } catch (err) {
+        toast({
+          title: '保存失败',
+          description: getApiErrorMessage(err, '请重试'),
+          variant: 'destructive',
+        });
+      }
+    },
+    [docId, kbId, fetchDoc],
+  );
 
   const handleEditorUpdate = useCallback(
     (getHtml: () => string, wc: number) => {
       setWordCount(wc);
+      latestHtmlRef.current = getHtml;
       triggerSave(getHtml);
     },
     [triggerSave],
@@ -386,7 +466,7 @@ const DocReadPage: React.FC = () => {
             {saveStatusLabels[saveStatus]}
           </span>
           <button
-            onClick={() => editorInstance && triggerManualSave(editorInstance.getHTML())}
+            onClick={() => triggerManualSave(currentEditorHtml)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium rounded-lg transition"
           >
             保存版本 (Ctrl+S)
@@ -394,15 +474,24 @@ const DocReadPage: React.FC = () => {
         </div>
 
         {/* Toolbar */}
-        {editorInstance && (
-          <EditorToolbar
-            editor={editorInstance}
+        {isHtmlDoc ? (
+          <HtmlDocumentToolbar
             zoom={zoom}
             onZoomChange={setZoom}
             sourceMode={sourceMode}
             onSourceModeChange={setSourceMode}
-            onFileUpload={handleFileUpload}
           />
+        ) : (
+          editorInstance && (
+            <EditorToolbar
+              editor={editorInstance}
+              zoom={zoom}
+              onZoomChange={setZoom}
+              sourceMode={sourceMode}
+              onSourceModeChange={setSourceMode}
+              onFileUpload={handleFileUpload}
+            />
+          )
         )}
 
         {/* Editor Area — paper on grey canvas */}
@@ -468,15 +557,25 @@ const DocReadPage: React.FC = () => {
                     };
                   }}
                 >
-                  <EditorCore
-                    content={initialContent}
-                    kbId={kbId}
-                    docId={docId}
-                    onEditorReady={(ed) => { setEditorInstance(ed); editorInstanceRef.current = ed; }}
-                    onUpdate={handleEditorUpdate}
-                    editable={true}
-                    sourceMode={sourceMode}
-                  />
+                  {isHtmlDoc ? (
+                    <HtmlDocumentEditor
+                      content={initialContent}
+                      onUpdate={handleEditorUpdate}
+                      editable={true}
+                      sourceMode={sourceMode}
+                    />
+                  ) : (
+                    <EditorCore
+                      content={initialContent}
+                      kbId={kbId}
+                      docId={docId}
+                      onEditorReady={(ed) => { setEditorInstance(ed); editorInstanceRef.current = ed; }}
+                      onUpdate={handleEditorUpdate}
+                      editable={true}
+                      sourceMode={sourceMode}
+                      onUseAsHtmlDocument={handleUseAsHtmlDocument}
+                    />
+                  )}
                 </ErrorBoundary>
               )}
             </div>
@@ -633,7 +732,11 @@ const DocReadPage: React.FC = () => {
                 <span>{readWordCount} 字</span>
               </div>
 
-              <DocViewer content={content} containerRef={contentRef} />
+              {isHtmlDoc ? (
+                <HtmlDocumentViewer html={content} />
+              ) : (
+                <DocViewer content={content} containerRef={contentRef} />
+              )}
             </div>
           </div>
 

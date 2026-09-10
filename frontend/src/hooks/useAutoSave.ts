@@ -19,6 +19,13 @@ interface UseAutoSaveOptions {
   onSave: (content: string, createVersion?: boolean) => Promise<void>;
   onManualSave?: (content: string) => Promise<void>;
   editor: any | null;
+  /**
+   * Reads the current content when there is no TipTap instance to ask.
+   *
+   * An HTML document is edited as source, so it has no editor; without this
+   * Ctrl+S would silently do nothing there. Preferred over `editor` when given.
+   */
+  getContent?: () => string;
   debounceMs?: number;
 }
 
@@ -26,6 +33,7 @@ export function useAutoSave({
   onSave,
   onManualSave,
   editor,
+  getContent,
   debounceMs = 2000,
 }: UseAutoSaveOptions) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -93,14 +101,16 @@ export function useAutoSave({
     const handleKeyDown = async (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        if (editor) {
+        if (getContent) {
+          await triggerManualSave(getContent);
+        } else if (editor) {
           await triggerManualSave(editor.getHTML());
         }
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [editor, triggerManualSave]);
+  }, [editor, getContent, triggerManualSave]);
 
   // Save before unload
   useEffect(() => {

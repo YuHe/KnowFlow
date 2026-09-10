@@ -17,6 +17,18 @@ export const ROLE_LEVELS: Record<string, number> = {
 export type KbRole = typeof KB_ROLES[keyof typeof KB_ROLES]
 export type SystemRole = 'user' | 'super_admin'
 
+/**
+ * How a document's content_html should be interpreted, and which editor owns it.
+ *
+ * `richtext` — TipTap. content_md and content_html are two projections of one
+ *              ProseMirror document and round-trip on every save.
+ * `html`     — a standalone HTML document (e.g. an LLM-generated report).
+ *              content_html is authoritative and must never go through the
+ *              markdown round trip, which would destroy its layout; content_md
+ *              holds a plain-text extraction for search only.
+ */
+export type ContentFormat = 'richtext' | 'html'
+
 // Auth field rules, shared by every form that sets one of these values
 // (RegisterPage, ProfilePage). They mirror backend/app/schemas/auth.py — keep
 // them in sync: anything a form accepts but the schema rejects surfaces only as
@@ -170,6 +182,7 @@ export interface Document {
   title: string
   content_md: string
   content_html: string
+  content_format: ContentFormat
   is_public: boolean
   template_id: string | null
   created_by: string
@@ -204,6 +217,7 @@ export interface DocCreate {
   title: string
   content_md?: string
   content_html?: string
+  content_format?: ContentFormat
   section_id?: string | null
   parent_id?: string | null
   template_id?: string | null
@@ -214,6 +228,11 @@ export interface DocUpdate {
   title?: string
   content_md?: string
   content_html?: string
+  /**
+   * Sent only when establishing a document's format — omitted on every ordinary
+   * save, so an autosave can never flip a rich-text document to html.
+   */
+  content_format?: ContentFormat
   section_id?: string | null
   parent_id?: string | null
   is_public?: boolean

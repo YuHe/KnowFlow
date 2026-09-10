@@ -26,6 +26,7 @@ import TurndownService from 'turndown'
 import * as turndownPluginGfm from 'turndown-plugin-gfm'
 import { uploadImage } from '../../api/upload'
 import { markdownToHtml } from '../../utils/markdown'
+import { isHtmlDocument, hasDocumentStructure } from '../../utils/htmlDocument'
 import { downscaleImage, dataUrlToFile } from '../../utils/imageCompress'
 import { getApiErrorCode, getApiErrorMessage } from '@/utils'
 import { localizeRemoteImages, type FailedImage } from '../../utils/remoteImages'
@@ -189,9 +190,17 @@ interface EditorCoreProps {
   onUpdate: (getHtml: () => string, wordCount: number) => void
   editable?: boolean
   sourceMode?: boolean
+  /**
+   * Turn the document into a standalone HTML document with this markup.
+   *
+   * Supplied by the page, which owns the format flag and the save. When absent
+   * the HTML branch of the paste handler is disabled entirely, so an embedder
+   * that cannot support the format never offers it.
+   */
+  onUseAsHtmlDocument?: (html: string) => void
 }
 
-export default function EditorCore({ content, kbId, docId, onEditorReady, onUpdate, editable = true, sourceMode = false }: EditorCoreProps) {
+export default function EditorCore({ content, kbId, docId, onEditorReady, onUpdate, editable = true, sourceMode = false, onUseAsHtmlDocument }: EditorCoreProps) {
   const isFirstLoad = useRef(true)
   const [mdPrompt, setMdPrompt] = useState<{ text: string } | null>(null)
   const [mdLoading, setMdLoading] = useState(false)
@@ -205,6 +214,11 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   // Pasted images upload before they can be inserted; without an indicator the
   // paste looks like it did nothing at all.
   const [uploadingImage, setUploadingImage] = useState(false)
+  // A pasted standalone HTML document awaiting the user's choice.
+  const [htmlPrompt, setHtmlPrompt] = useState<{
+    text: string
+    canBecomeDocument: boolean
+  } | null>(null)
   // handlePaste lives inside the useEditor config, so it cannot close over the
   // editor it is configuring.
   const editorRef = useRef<Editor | null>(null)
@@ -376,8 +390,21 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
           return false
         }
 
-        // Handle markdown paste detection
         const textItem = event.clipboardData?.getData('text/plain') || ''
+
+        // A standalone HTML document, pasted as source text — the shape an
+        // LLM-generated report arrives in when copied from a chat UI. Offered
+        // before the markdown branch: an HTML document can trip
+        // looksLikeMarkdown, and once that banner is confirmed the markup is
+        // gone. Only offered for an empty document, because a document cannot be
+        // half rich text and half HTML.
+        if (onUseAsHtmlDocument && isHtmlDocument(textItem)) {
+          event.preventDefault()
+          setHtmlPrompt({ text: textItem, canBecomeDocument: view.state.doc.textContent.trim() === '' })
+          return true
+        }
+
+        // Handle markdown paste detection
         if (textItem.length > 50 && looksLikeMarkdown(textItem)) {
           event.preventDefault()
           setMdPrompt({ text: textItem })
@@ -539,6 +566,77 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
           图片上传中…
+        </div>
+      )}
+      {/* Pasted HTML document prompt banner */}
+      {htmlPrompt && (
+        <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm">
+          <div className="flex items-center gap-2 flex-wrap">
+            <svg className="w-4 h-4 text-violet-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+            <span className="text-violet-800">
+              检测到完整的 HTML {hasDocumentStructure(htmlPrompt.text) ? '文档' : '内容'}，如何处理？
+            </span>
+            <div className="flex-1" />
+            {htmlPrompt.canBecomeDocument ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const { text } = htmlPrompt
+                  setHtmlPrompt(null)
+                  onUseAsHtmlDocument?.(text)
+                }}
+                className="px-2.5 py-1 rounded bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition"
+              >
+                作为 HTML 文档
+              </button>
+            ) : (
+              <span
+                className="text-xs text-violet-600/70"
+                title="当前文档已有内容。一篇文档不能一半富文本、一半 HTML，请新建空白文档后再粘贴。"
+              >
+                （需空白文档才能作为 HTML 文档）
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const { text } = htmlPrompt
+                setHtmlPrompt(null)
+                // Let TipTap parse it: anything outside the schema is dropped, so
+                // a report's layout will flatten — but everything stays editable.
+                editor?.chain().focus().insertContent(text).run()
+              }}
+              className="px-2.5 py-1 rounded border border-violet-300 text-violet-700 text-xs hover:bg-violet-100 transition"
+            >
+              转为富文本
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { text } = htmlPrompt
+                setHtmlPrompt(null)
+                editor?.chain().focus().insertContent(text, {
+                  parseOptions: { preserveWhitespace: 'full' },
+                }).run()
+              }}
+              className="px-2.5 py-1 rounded text-violet-700 text-xs hover:bg-violet-100 transition"
+              title="按原始文本插入，不解析标签"
+            >
+              纯文本
+            </button>
+            <button
+              type="button"
+              onClick={() => setHtmlPrompt(null)}
+              className="p-1 rounded hover:bg-violet-100 transition"
+              title="关闭"
+            >
+              <svg className="w-3.5 h-3.5 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
       {/* Markdown paste prompt banner */}

@@ -313,3 +313,91 @@ class TestDocumentMove:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["data"]["section_id"] == str(section.id)
+
+
+class TestContentFormat:
+    """
+    A document declares whether its content_html is a ProseMirror projection
+    (`richtext`) or a standalone HTML document (`html`).
+
+    The distinction has to exist server-side because the two have incompatible
+    save contracts: a rich-text document re-derives its markdown on every save,
+    while an HTML report's markup is authoritative and must never make that round
+    trip. Rows created before this column existed default to `richtext`, so their
+    behaviour is unchanged.
+    """
+
+    async def test_defaults_to_richtext(
+        self, async_client: AsyncClient, test_user, test_kb, auth_headers
+    ):
+        headers = await auth_headers(test_user)
+        resp = await async_client.post(
+            f"/api/v1/kb/{test_kb.id}/docs",
+            json={"title": "Plain"},
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["data"]["content_format"] == "richtext"
+
+    async def test_can_be_created_as_html(
+        self, async_client: AsyncClient, test_user, test_kb, auth_headers
+    ):
+        headers = await auth_headers(test_user)
+        resp = await async_client.post(
+            f"/api/v1/kb/{test_kb.id}/docs",
+            json={
+                "title": "Report",
+                "content_html": "<!DOCTYPE html><html><body><h1>R</h1></body></html>",
+                "content_md": "R",
+                "content_format": "html",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["data"]["content_format"] == "html"
+
+    async def test_survives_a_round_trip_through_get(
+        self, async_client: AsyncClient, test_user, test_kb, auth_headers
+    ):
+        headers = await auth_headers(test_user)
+        created = await async_client.post(
+            f"/api/v1/kb/{test_kb.id}/docs",
+            json={"title": "Report", "content_format": "html"},
+            headers=headers,
+        )
+        doc_id = created.json()["data"]["id"]
+        resp = await async_client.get(f"/api/v1/docs/{doc_id}", headers=headers)
+        assert resp.json()["data"]["content_format"] == "html"
+
+    async def test_an_ordinary_save_cannot_flip_the_format(
+        self, async_client: AsyncClient, test_user, test_kb, auth_headers
+    ):
+        """
+        The editor omits content_format on every normal save, so a rich-text
+        document can never be turned into an HTML one by an autosave.
+        """
+        headers = await auth_headers(test_user)
+        created = await async_client.post(
+            f"/api/v1/kb/{test_kb.id}/docs",
+            json={"title": "Report", "content_format": "html"},
+            headers=headers,
+        )
+        doc_id = created.json()["data"]["id"]
+        resp = await async_client.put(
+            f"/api/v1/docs/{doc_id}",
+            json={"content_html": "<p>edited</p>"},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["data"]["content_format"] == "html"
+
+    async def test_rejects_an_unknown_format(
+        self, async_client: AsyncClient, test_user, test_kb, auth_headers
+    ):
+        headers = await auth_headers(test_user)
+        resp = await async_client.post(
+            f"/api/v1/kb/{test_kb.id}/docs",
+            json={"title": "X", "content_format": "pdf"},
+            headers=headers,
+        )
+        assert resp.status_code == 422, resp.text

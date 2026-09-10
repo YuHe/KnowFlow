@@ -3,7 +3,7 @@ from __future__ import annotations
 import urllib.parse
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -30,12 +30,16 @@ router = APIRouter(tags=["documents"])
 # ---- Schemas ----------------------------------------------------------------
 
 
+CONTENT_FORMATS = ("richtext", "html")
+
+
 class DocCreate(BaseModel):
     title: str = Field("Untitled", max_length=512)
     section_id: Optional[uuid.UUID] = None
     parent_id: Optional[uuid.UUID] = None
     content_md: str = ""
     content_html: str = ""
+    content_format: Literal["richtext", "html"] = "richtext"
     template_id: Optional[uuid.UUID] = None
 
 
@@ -45,6 +49,10 @@ class DocUpdate(BaseModel):
     parent_id: Optional[uuid.UUID] = None
     content_md: Optional[str] = None
     content_html: Optional[str] = None
+    # Omitted on an ordinary save, so a rich-text document can never be flipped
+    # to html by accident; the editor sends it only when it is establishing the
+    # format.
+    content_format: Optional[Literal["richtext", "html"]] = None
     sort_order: Optional[int] = None
     is_public: Optional[bool] = None
     is_manual_save: bool = False
@@ -69,6 +77,7 @@ def _doc_to_dict(doc: Document) -> dict:
         "title": doc.title,
         "content_md": doc.content_md,
         "content_html": doc.content_html,
+        "content_format": doc.content_format,
         "is_public": doc.is_public,
         "sort_order": doc.sort_order,
         "word_count": doc.word_count,
@@ -262,6 +271,7 @@ async def create_doc(
         title=payload.title,
         content_md=payload.content_md,
         content_html=payload.content_html,
+        content_format=payload.content_format,
         sort_order=sort_order,
         template_id=payload.template_id,
         created_by=current_user.id,
@@ -314,6 +324,8 @@ async def update_doc(
         doc.word_count = _count_words(payload.content_md)
     if payload.content_html is not None:
         doc.content_html = payload.content_html
+    if payload.content_format is not None:
+        doc.content_format = payload.content_format
     if payload.sort_order is not None:
         doc.sort_order = payload.sort_order
     if payload.is_public is not None:
