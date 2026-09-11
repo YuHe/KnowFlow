@@ -1,6 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ZoomIn, ZoomOut } from 'lucide-react'
+import {
+  Undo2, Redo2, Heading, Bold, Italic, Underline, Strikethrough, Superscript, Subscript,
+  Highlighter, Baseline, Code, SquareCode, RemoveFormatting,
+  AlignLeft, AlignCenter, AlignRight,
+  List, ListOrdered, ListTodo, TextQuote, Minus, ListCollapse,
+  Link as LinkIcon, Image as ImageIcon, Video, Table as TableIcon,
+  Rows3, Columns3, Grid2x2, Trash2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  ArrowUpToLine, ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine,
+  TableColumnsSplit, StretchHorizontal, PanelTop, PanelLeft, MoveVertical,
+  AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
+  FileCode, ZoomIn, ZoomOut,
+} from 'lucide-react'
+import Tooltip from '@/components/ui/Tooltip'
 import { FONT_SIZES } from './FontSize'
 
 interface EditorToolbarProps {
@@ -60,31 +72,171 @@ function useEditorRevision(editor: Editor | null): void {
   }, [editor])
 }
 
+/**
+ * An icon button.
+ *
+ * `label` is both the hover text and the accessible name. There is deliberately
+ * no `title`: the browser would then show its own slow tooltip on top of ours.
+ */
 const ToolbarButton: React.FC<{
   onClick: () => void
+  label: string
+  shortcut?: string
   active?: boolean
-  title?: string
   disabled?: boolean
+  danger?: boolean
   children: React.ReactNode
-}> = ({ onClick, active, title, disabled, children }) => (
+}> = ({ onClick, label, shortcut, active, disabled, danger, children }) => (
+  <Tooltip label={label} shortcut={shortcut}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={active}
+      className={`flex h-7 w-7 items-center justify-center rounded transition disabled:opacity-40 ${
+        active
+          ? 'bg-indigo-100 text-indigo-700'
+          : danger
+            ? 'text-red-500 hover:bg-red-50'
+            : 'text-gray-600 hover:bg-gray-100'
+      }`}
+    >
+      {children}
+    </button>
+  </Tooltip>
+)
+
+/** Icon size used by every control here, so the row reads as one set. */
+const ICON = 'w-[17px] h-[17px]'
+
+const Divider = () => <div className="mx-1 h-5 w-px bg-gray-200" />
+
+/**
+ * A dropdown, owning its own open state and dismissal.
+ *
+ * Previously each menu contributed a `useState`, a `useRef` and a clause to one
+ * shared outside-click effect — eight of each by the end, and adding a ninth
+ * meant editing four places. Each menu now closes itself on an outside mousedown
+ * or Escape, which also means opening one closes any other: its trigger is
+ * outside theirs.
+ */
+const ToolbarMenu: React.FC<{
+  label: string
+  /** Text in the trigger; omitted for icon-only triggers. */
+  text?: string
+  icon?: React.ReactNode
+  width?: string
+  active?: boolean
+  children: (close: () => void) => React.ReactNode
+}> = ({ label, text, icon, width = 'w-44', active, children }) => {
+  const ref = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div className="relative" ref={ref}>
+      <Tooltip label={label}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={label}
+          aria-expanded={open}
+          className={`flex h-7 items-center gap-1 rounded text-xs transition ${text ? 'px-1.5' : 'w-7 justify-center'} ${
+            open || active ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          {icon}
+          {text && <span>{text}</span>}
+          <ChevronDown className="h-3 w-3 text-gray-400" />
+        </button>
+      </Tooltip>
+      {open && (
+        <div
+          role="menu"
+          className={`absolute left-0 top-full z-50 mt-1 rounded-lg border border-gray-200 bg-white py-1 shadow-lg ${width}`}
+        >
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A row in a dropdown: icon, then the words for what it does. */
+const MenuItem: React.FC<{
+  icon?: React.ReactNode
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  danger?: boolean
+}> = ({ icon, label, onClick, disabled, danger }) => (
   <button
     type="button"
-    onClick={onClick}
+    role="menuitem"
     disabled={disabled}
-    title={title}
-    className={`w-7 h-7 flex items-center justify-center rounded text-sm transition ${
-      active ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
-    } disabled:opacity-40`}
+    onClick={onClick}
+    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+      disabled
+        ? 'cursor-not-allowed text-gray-300'
+        : danger
+          ? 'text-red-600 hover:bg-red-50'
+          : 'text-gray-700 hover:bg-gray-50'
+    }`}
   >
-    {children}
+    <span className="flex h-4 w-4 shrink-0 items-center justify-center text-gray-400">{icon}</span>
+    {label}
   </button>
 )
 
-const Divider = () => <div className="w-px h-5 bg-gray-200 mx-1" />
+const MenuSection: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="border-t border-gray-100 pt-1.5 mt-1">
+    <p className="px-3 pb-1 text-[11px] text-gray-400">{label}</p>
+    {children}
+  </div>
+)
+
+const MenuDivider = () => <div className="my-1 border-t border-gray-100" />
+
+/** A colour swatch grid, shared by text colour, highlight and cell fill. */
+const Swatches: React.FC<{
+  colors: { label: string; value: string }[]
+  onPick: (value: string) => void
+}> = ({ colors, onPick }) => (
+  <div className="grid grid-cols-5 gap-1 px-3 pb-1">
+    {colors.map((color) => (
+      <Tooltip key={color.value} label={color.label}>
+        <button
+          type="button"
+          aria-label={color.label}
+          onClick={() => onPick(color.value)}
+          className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 transition hover:scale-110"
+          style={{ backgroundColor: color.value || '#ffffff' }}
+        >
+          {!color.value && <span className="text-[10px] text-gray-400">✕</span>}
+        </button>
+      </Tooltip>
+    ))}
+  </div>
+)
 
 const ZOOM_LEVELS = [50, 75, 90, 100, 110, 125, 150, 175, 200]
 
-// Heading levels + body text — combined dropdown replacing individual H1/H2/H3 buttons
 const HEADING_OPTIONS = [
   { label: '正文', level: 0 },
   { label: '标题 1', level: 1 },
@@ -96,13 +248,7 @@ const HEADING_OPTIONS = [
 ]
 
 const HEADING_FONT_SIZES: Record<number, string> = {
-  0: '14px',
-  1: '28px',
-  2: '22px',
-  3: '18px',
-  4: '16px',
-  5: '14px',
-  6: '13px',
+  0: '14px', 1: '28px', 2: '22px', 3: '18px', 4: '16px', 5: '14px', 6: '13px',
 }
 
 const TEXT_COLORS = [
@@ -132,9 +278,9 @@ const HIGHLIGHT_COLORS = [
   { label: '青色', value: '#a5f3fc' },
 ]
 
-// Cell fill palette. Deliberately paler than HIGHLIGHT_COLORS: a highlight sits
-// behind a few words, a cell fill sits behind a whole block, so it has to stay
-// readable. 飞书 and Notion both ship a fixed palette rather than a colour picker.
+// Deliberately paler than HIGHLIGHT_COLORS: a highlight sits behind a few words,
+// a cell fill sits behind a whole block, so it has to stay readable. 飞书 and
+// Notion both ship a fixed palette rather than a colour picker.
 const CELL_FILL_COLORS = [
   { label: '无填充', value: '' },
   { label: '灰', value: '#f3f4f6' },
@@ -147,104 +293,54 @@ const CELL_FILL_COLORS = [
   { label: '紫', value: '#f3e8ff' },
 ]
 
-const VERTICAL_ALIGN_OPTIONS: { label: string; value: 'top' | 'middle' | 'bottom' }[] = [
-  { label: '顶端对齐', value: 'top' },
-  { label: '垂直居中', value: 'middle' },
-  { label: '底端对齐', value: 'bottom' },
-]
-
-// Presets for the row-height menu. Dragging a row's bottom border does the same
-// thing continuously; this is the keyboard-reachable path and the way to apply
-// one height to several rows at once (select cells across them first).
+// Row-height presets. Dragging a row's bottom border does the same thing
+// continuously; this is the keyboard-reachable path and the way to apply one
+// height to several rows at once (select cells across them first).
 const ROW_HEIGHT_OPTIONS: { label: string; value: number | null }[] = [
   { label: '自适应', value: null },
-  { label: '紧凑 (28px)', value: 28 },
-  { label: '标准 (36px)', value: 36 },
-  { label: '宽松 (48px)', value: 48 },
-  { label: '很宽松 (64px)', value: 64 },
-  { label: '超宽 (96px)', value: 96 },
+  { label: '紧凑 28px', value: 28 },
+  { label: '标准 36px', value: 36 },
+  { label: '宽松 48px', value: 48 },
+  { label: '很宽松 64px', value: 64 },
+  { label: '超宽 96px', value: 96 },
 ]
 
-export default function EditorToolbar({ editor, zoom = 100, onZoomChange, sourceMode = false, onSourceModeChange, onFileUpload }: EditorToolbarProps) {
+export default function EditorToolbar({
+  editor, zoom = 100, onZoomChange, sourceMode = false, onSourceModeChange, onFileUpload,
+}: EditorToolbarProps) {
   // Without this, every isActive/can() below is whatever it was at the last
   // page-level render.
   useEditorRevision(editor)
-  const [showLinkInput, setShowLinkInput] = useState(false)
+
   const [linkUrl, setLinkUrl] = useState('')
-  const [showColorPicker, setShowColorPicker] = useState(false)
-  const [showHighlightPicker, setShowHighlightPicker] = useState(false)
-  const [showHeading, setShowHeading] = useState(false)
-  const [showImageMenu, setShowImageMenu] = useState(false)
-  const [showRowHeight, setShowRowHeight] = useState(false)
-  const [showCellFill, setShowCellFill] = useState(false)
-  const [showFontSize, setShowFontSize] = useState(false)
-  const [showEmbed, setShowEmbed] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
   const [embedUrl, setEmbedUrl] = useState('')
   const [embedError, setEmbedError] = useState('')
-  const [imageUrl, setImageUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
-  const colorPickerRef = useRef<HTMLDivElement>(null)
-  const highlightPickerRef = useRef<HTMLDivElement>(null)
-  const headingRef = useRef<HTMLDivElement>(null)
-  const imageMenuRef = useRef<HTMLDivElement>(null)
-  const rowHeightRef = useRef<HTMLDivElement>(null)
-  const cellFillRef = useRef<HTMLDivElement>(null)
-  const fontSizeRef = useRef<HTMLDivElement>(null)
-  const embedRef = useRef<HTMLDivElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight && !showCellFill && !showFontSize && !showEmbed) return
-    const handle = (e: MouseEvent) => {
-      if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
-        setShowColorPicker(false)
-      }
-      if (showHighlightPicker && highlightPickerRef.current && !highlightPickerRef.current.contains(e.target as Node)) {
-        setShowHighlightPicker(false)
-      }
-      if (showHeading && headingRef.current && !headingRef.current.contains(e.target as Node)) {
-        setShowHeading(false)
-      }
-      if (showImageMenu && imageMenuRef.current && !imageMenuRef.current.contains(e.target as Node)) {
-        setShowImageMenu(false)
-      }
-      if (showRowHeight && rowHeightRef.current && !rowHeightRef.current.contains(e.target as Node)) {
-        setShowRowHeight(false)
-      }
-      if (showCellFill && cellFillRef.current && !cellFillRef.current.contains(e.target as Node)) {
-        setShowCellFill(false)
-      }
-      if (showFontSize && fontSizeRef.current && !fontSizeRef.current.contains(e.target as Node)) {
-        setShowFontSize(false)
-      }
-      if (showEmbed && embedRef.current && !embedRef.current.contains(e.target as Node)) {
-        setShowEmbed(false)
-      }
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight, showCellFill, showFontSize, showEmbed])
 
   if (!editor) return null
 
-  const handleLinkSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (linkUrl) {
-      editor.chain().focus().setLink({ href: linkUrl }).run()
-    } else {
-      editor.chain().focus().unsetLink().run()
-    }
-    setShowLinkInput(false)
-    setLinkUrl('')
-  }
+  const currentColor = editor.getAttributes('textStyle').color || ''
+  const currentHighlight = editor.getAttributes('highlight').color || ''
+  const currentFontSize: string = editor.getAttributes('textStyle').fontSize || ''
 
-  const handleInsertImageUrl = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (imageUrl) {
-      editor.chain().focus().setImage({ src: imageUrl }).run()
+  const currentHeadingLevel = (() => {
+    for (let i = 1; i <= 6; i++) if (editor.isActive('heading', { level: i })) return i
+    return 0
+  })()
+  const currentHeadingLabel =
+    HEADING_OPTIONS.find((h) => h.level === currentHeadingLevel)?.label || '正文'
+
+  const uploadPickedImage = async (file: File) => {
+    if (!onFileUpload || !file.type.startsWith('image/')) return
+    setIsUploading(true)
+    try {
+      const url = await onFileUpload(file)
+      if (url) editor.chain().focus().setImage({ src: url, alt: file.name }).run()
+    } finally {
+      setIsUploading(false)
     }
-    setImageUrl('')
-    setShowImageMenu(false)
   }
 
   /**
@@ -254,8 +350,8 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
    * is the only feedback the command gives — without surfacing it, an unsupported
    * link would look like a dead button.
    */
-  const handleInsertEmbed = (e: React.FormEvent) => {
-    e.preventDefault()
+  const insertEmbed = (close: () => void) => (event: React.FormEvent) => {
+    event.preventDefault()
     if (!embedUrl.trim()) return
     if (!editor.chain().focus().setEmbed(embedUrl.trim()).run()) {
       setEmbedError('暂不支持这个链接，目前可嵌入 B 站、YouTube、腾讯视频、Vimeo')
@@ -263,781 +359,500 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
     }
     setEmbedUrl('')
     setEmbedError('')
-    setShowEmbed(false)
+    close()
   }
 
-  const handleImageFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || !onFileUpload) return
-    if (!file.type.startsWith('image/')) return
-    setShowImageMenu(false)
-    setIsUploading(true)
-    try {
-      const url = await onFileUpload(file)
-      if (url) {
-        editor.chain().focus().setImage({ src: url, alt: file.name }).run()
-      }
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  const handleInsertTable = () => {
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-  }
-
-  const currentColor = editor.getAttributes('textStyle').color || ''
-  const currentHighlight = editor.getAttributes('highlight').color || ''
-
-  // Determine current heading level
-  const currentHeadingLevel = (() => {
-    for (let i = 1; i <= 6; i++) {
-      if (editor.isActive('heading', { level: i })) return i
-    }
-    return 0
-  })()
-  const currentHeadingLabel = HEADING_OPTIONS.find(h => h.level === currentHeadingLevel)?.label || '正文'
-
-  // The size on the textStyle mark at the caret, or '' when it inherits.
-  const currentFontSize: string = editor.getAttributes('textStyle').fontSize || ''
+  const inTable = editor.isActive('table')
 
   return (
-    <div className="border-b border-gray-200 sticky top-0 bg-white z-10 px-3 py-1.5 flex items-center gap-0.5 flex-wrap shadow-sm">
-      {/* Undo */}
+    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b border-gray-200 bg-white px-3 py-1.5 shadow-sm">
       <ToolbarButton
         onClick={() => editor.chain().focus().undo().run()}
         disabled={!editor.can().undo()}
-        title="撤销 (Ctrl+Z)"
+        label="撤销"
+        shortcut="Ctrl+Z"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-        </svg>
+        <Undo2 className={ICON} />
       </ToolbarButton>
-
-      {/* Redo */}
       <ToolbarButton
         onClick={() => editor.chain().focus().redo().run()}
         disabled={!editor.can().redo()}
-        title="重做 (Ctrl+Y)"
+        label="重做"
+        shortcut="Ctrl+Y"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
-        </svg>
+        <Redo2 className={ICON} />
       </ToolbarButton>
 
       <Divider />
 
-      {/* Heading / Body dropdown (replaces H1/H2/H3 buttons) */}
-      <div className="relative" ref={headingRef}>
-        <button
-          type="button"
-          onClick={() => setShowHeading(v => !v)}
-          title="段落样式"
-          className="h-7 px-1.5 flex items-center justify-between gap-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-200 min-w-[60px]"
-        >
-          <span>{currentHeadingLabel}</span>
-          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {showHeading && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-32 py-1">
-            {HEADING_OPTIONS.map(h => (
+      {/* Paragraph style */}
+      <ToolbarMenu
+        label="段落样式"
+        text={currentHeadingLabel}
+        icon={<Heading className="h-3.5 w-3.5" />}
+        width="w-32"
+        active={currentHeadingLevel > 0}
+      >
+        {(close) => (
+          <>
+            {HEADING_OPTIONS.map((h) => (
               <button
                 key={h.level}
                 type="button"
+                role="menuitem"
                 onClick={() => {
-                  if (h.level === 0) {
-                    editor.chain().focus().setParagraph().run()
-                  } else {
-                    editor.chain().focus().toggleHeading({ level: h.level as 1|2|3|4|5|6 }).run()
-                  }
-                  setShowHeading(false)
+                  if (h.level === 0) editor.chain().focus().setParagraph().run()
+                  else editor.chain().focus().toggleHeading({ level: h.level as 1 | 2 | 3 | 4 | 5 | 6 }).run()
+                  close()
                 }}
-                className={`w-full text-left px-3 py-1.5 hover:bg-gray-50 transition flex items-baseline gap-2 ${
-                  currentHeadingLevel === h.level ? 'text-indigo-600 font-semibold' : 'text-gray-700'
+                className={`flex w-full items-baseline px-3 py-1.5 text-left transition hover:bg-gray-50 ${
+                  currentHeadingLevel === h.level ? 'font-semibold text-indigo-600' : 'text-gray-700'
                 }`}
                 style={{ fontSize: HEADING_FONT_SIZES[h.level] }}
               >
                 {h.label}
               </button>
             ))}
-          </div>
+          </>
         )}
-      </div>
-
-      <Divider />
-
-      {/* Font size. 飞书 and Google Docs both sit one next to the font controls;
-          Notion has none. Stored as an inline style on the textStyle mark, the
-          same way text colour already is. */}
-      <div className="relative" ref={fontSizeRef}>
-        <button
-          type="button"
-          onClick={() => setShowFontSize(v => !v)}
-          title="字号"
-          className="h-7 px-1.5 flex items-center justify-between gap-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-200 min-w-[52px]"
-        >
-          <span>{currentFontSize ? currentFontSize.replace('px', '') : '默认'}</span>
-          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {showFontSize && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-24 py-1 max-h-64 overflow-y-auto">
+      </ToolbarMenu>
+      {/* Font size */}
+      <ToolbarMenu
+        label="字号"
+        text={currentFontSize ? currentFontSize.replace('px', '') : '默认'}
+        width="w-24"
+        active={Boolean(currentFontSize)}
+      >
+        {(close) => (
+          <>
             <button
               type="button"
-              onClick={() => {
-                editor.chain().focus().unsetFontSize().run()
-                setShowFontSize(false)
-              }}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition ${
-                currentFontSize ? 'text-gray-700' : 'text-indigo-600 font-semibold'
+              role="menuitem"
+              onClick={() => { editor.chain().focus().unsetFontSize().run(); close() }}
+              className={`w-full px-3 py-1.5 text-left text-xs transition hover:bg-gray-50 ${
+                currentFontSize ? 'text-gray-700' : 'font-semibold text-indigo-600'
               }`}
             >
               默认
             </button>
-            {FONT_SIZES.map(size => (
+            {FONT_SIZES.map((size) => (
               <button
                 key={size}
                 type="button"
-                onClick={() => {
-                  editor.chain().focus().setFontSize(size).run()
-                  setShowFontSize(false)
-                }}
-                className={`w-full text-left px-3 py-1.5 hover:bg-gray-50 transition ${
-                  currentFontSize === size ? 'text-indigo-600 font-semibold' : 'text-gray-700'
+                role="menuitem"
+                onClick={() => { editor.chain().focus().setFontSize(size).run(); close() }}
+                className={`w-full px-3 py-1.5 text-left transition hover:bg-gray-50 ${
+                  currentFontSize === size ? 'font-semibold text-indigo-600' : 'text-gray-700'
                 }`}
                 style={{ fontSize: size }}
               >
                 {size.replace('px', '')}
               </button>
             ))}
-          </div>
+          </>
         )}
-      </div>
+      </ToolbarMenu>
 
       <Divider />
 
-      {/* Bold */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        active={editor.isActive('bold')}
-        title="加粗 (Ctrl+B)"
-      >
-        <span className="font-bold text-sm">B</span>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} label="加粗" shortcut="Ctrl+B">
+        <Bold className={ICON} />
       </ToolbarButton>
-
-      {/* Italic */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        active={editor.isActive('italic')}
-        title="斜体 (Ctrl+I)"
-      >
-        <span className="italic text-sm">I</span>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} label="斜体" shortcut="Ctrl+I">
+        <Italic className={ICON} />
       </ToolbarButton>
-
-      {/* Underline */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
-        active={editor.isActive('underline')}
-        title="下划线 (Ctrl+U)"
-      >
-        <span className="underline text-sm">U</span>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} label="下划线" shortcut="Ctrl+U">
+        <Underline className={ICON} />
       </ToolbarButton>
-
-      {/* Strike */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        active={editor.isActive('strike')}
-        title="删除线"
-      >
-        <span className="line-through text-sm">S</span>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} label="删除线">
+        <Strikethrough className={ICON} />
       </ToolbarButton>
-
-      {/* Superscript / Subscript. The two exclude each other, so the active
-          states are mutually exclusive by construction. */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleSuperscript().run()}
-        active={editor.isActive('superscript')}
-        title="上标 (Ctrl+.)"
-      >
-        <span className="text-sm">x²</span>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleSuperscript().run()} active={editor.isActive('superscript')} label="上标" shortcut="Ctrl+.">
+        <Superscript className={ICON} />
       </ToolbarButton>
-
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleSubscript().run()}
-        active={editor.isActive('subscript')}
-        title="下标 (Ctrl+,)"
-      >
-        <span className="text-sm">x₂</span>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleSubscript().run()} active={editor.isActive('subscript')} label="下标" shortcut="Ctrl+,">
+        <Subscript className={ICON} />
       </ToolbarButton>
-
-      {/* Highlight — multi-color picker */}
-      <div className="relative" ref={highlightPickerRef}>
-        <button
-          type="button"
-          onClick={() => setShowHighlightPicker(v => !v)}
-          title="文字高亮"
-          className={`w-7 h-7 flex flex-col items-center justify-center rounded text-sm transition hover:bg-gray-100 ${
-            editor.isActive('highlight') ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600'
-          }`}
-        >
-          <span className="font-bold text-sm leading-none" style={{ fontFamily: 'serif' }}>A</span>
-          <span
-            className="w-4 h-1 rounded-sm mt-0.5"
-            style={{ backgroundColor: currentHighlight || '#fef08a' }}
-          />
-        </button>
-        {showHighlightPicker && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-44">
-            <p className="text-xs text-gray-400 mb-1.5 px-1">背景高亮</p>
-            <div className="grid grid-cols-4 gap-1">
-              {HIGHLIGHT_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  title={c.label}
-                  onClick={() => {
-                    if (c.value) {
-                      editor.chain().focus().setHighlight({ color: c.value }).run()
-                    } else {
-                      editor.chain().focus().unsetHighlight().run()
-                    }
-                    setShowHighlightPicker(false)
-                  }}
-                  className="w-8 h-8 rounded border border-gray-200 hover:scale-110 transition-transform flex items-center justify-center"
-                  style={{ backgroundColor: c.value || '#ffffff' }}
-                >
-                  {!c.value && <span className="text-xs text-gray-400">✕</span>}
-                </button>
-              ))}
-            </div>
-          </div>
+      {/* Text colour and highlight. The icon carries a swatch of the colour in
+          force, which is the only way to tell at a glance what the button will
+          apply — Google Docs and 飞书 both do this. */}
+      <ToolbarMenu
+        label="文字颜色"
+        width="w-52"
+        active={Boolean(currentColor)}
+        icon={
+          <span className="flex flex-col items-center">
+            <Baseline className="h-3.5 w-3.5" />
+            <span className="mt-[1px] h-[3px] w-4 rounded-sm" style={{ backgroundColor: currentColor || '#374151' }} />
+          </span>
+        }
+      >
+        {(close) => (
+          <>
+            <p className="px-3 pb-1 text-[11px] text-gray-400">文字颜色</p>
+            <Swatches
+              colors={TEXT_COLORS}
+              onPick={(value) => {
+                if (value) editor.chain().focus().setColor(value).run()
+                else editor.chain().focus().unsetColor().run()
+                close()
+              }}
+            />
+          </>
         )}
-      </div>
+      </ToolbarMenu>
 
-      {/* Text Color — uses setColor which preserves bold/italic/underline marks */}
-      <div className="relative" ref={colorPickerRef}>
-        <button
-          type="button"
-          onClick={() => setShowColorPicker((v) => !v)}
-          title="文字颜色"
-          className="w-7 h-7 flex flex-col items-center justify-center rounded text-sm transition text-gray-600 hover:bg-gray-100"
-        >
-          <span className="font-bold text-sm leading-none">A</span>
-          <span
-            className="w-4 h-1 rounded-sm mt-0.5"
-            style={{ backgroundColor: currentColor || '#374151' }}
-          />
-        </button>
-        {showColorPicker && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-48">
-            <p className="text-xs text-gray-400 mb-1.5 px-1">文字颜色</p>
-            <div className="grid grid-cols-4 gap-1">
-              {TEXT_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  title={c.label}
-                  onClick={() => {
-                    if (c.value) {
-                      editor.chain().focus().setColor(c.value).run()
-                    } else {
-                      editor.chain().focus().unsetColor().run()
-                    }
-                    setShowColorPicker(false)
-                  }}
-                  className="w-8 h-8 rounded border border-gray-200 hover:scale-110 transition-transform flex items-center justify-center"
-                  style={{ backgroundColor: c.value || '#ffffff' }}
-                >
-                  {!c.value && <span className="text-xs text-gray-400">✕</span>}
-                </button>
-              ))}
-            </div>
-          </div>
+      <ToolbarMenu
+        label="文字高亮"
+        width="w-52"
+        active={editor.isActive('highlight')}
+        icon={
+          <span className="flex flex-col items-center">
+            <Highlighter className="h-3.5 w-3.5" />
+            <span className="mt-[1px] h-[3px] w-4 rounded-sm" style={{ backgroundColor: currentHighlight || '#fef08a' }} />
+          </span>
+        }
+      >
+        {(close) => (
+          <>
+            <p className="px-3 pb-1 text-[11px] text-gray-400">背景高亮</p>
+            <Swatches
+              colors={HIGHLIGHT_COLORS}
+              onPick={(value) => {
+                if (value) editor.chain().focus().setHighlight({ color: value }).run()
+                else editor.chain().focus().unsetHighlight().run()
+                close()
+              }}
+            />
+          </>
         )}
-      </div>
+      </ToolbarMenu>
 
-      {/* Inline Code */}
       <ToolbarButton
-        onClick={() => editor.chain().focus().toggleCode().run()}
-        active={editor.isActive('code')}
-        title="行内代码"
+        onClick={() => editor.chain().focus().unsetAllMarks().run()}
+        label="清除文字格式"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l-3 3 3 3m8-6l3 3-3 3" />
-        </svg>
+        <RemoveFormatting className={ICON} />
+      </ToolbarButton>
+      <Divider />
+
+      <ToolbarButton onClick={() => editor.chain().focus().setTextAlign('left').run()} active={editor.isActive({ textAlign: 'left' })} label="左对齐">
+        <AlignLeft className={ICON} />
+      </ToolbarButton>
+      <ToolbarButton onClick={() => editor.chain().focus().setTextAlign('center').run()} active={editor.isActive({ textAlign: 'center' })} label="居中对齐">
+        <AlignCenter className={ICON} />
+      </ToolbarButton>
+      <ToolbarButton onClick={() => editor.chain().focus().setTextAlign('right').run()} active={editor.isActive({ textAlign: 'right' })} label="右对齐">
+        <AlignRight className={ICON} />
       </ToolbarButton>
 
       <Divider />
 
-      {/* Text Align */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().setTextAlign('left').run()}
-        active={editor.isActive({ textAlign: 'left' })}
-        title="左对齐"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h10M4 14h16M4 18h10" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} label="无序列表">
+        <List className={ICON} />
       </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().setTextAlign('center').run()}
-        active={editor.isActive({ textAlign: 'center' })}
-        title="居中对齐"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 10h10M4 14h16M7 18h10" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} label="有序列表">
+        <ListOrdered className={ICON} />
       </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().setTextAlign('right').run()}
-        active={editor.isActive({ textAlign: 'right' })}
-        title="右对齐"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M10 10h10M4 14h16M10 18h10" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleTaskList().run()} active={editor.isActive('taskList')} label="任务列表">
+        <ListTodo className={ICON} />
       </ToolbarButton>
 
       <Divider />
 
-      {/* BulletList */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        active={editor.isActive('bulletList')}
-        title="无序列表"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} label="引用">
+        <TextQuote className={ICON} />
       </ToolbarButton>
-
-      {/* OrderedList */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        active={editor.isActive('orderedList')}
-        title="有序列表"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h10M7 16h10M3 8h.01M3 12h.01M3 16h.01" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} label="行内代码">
+        <Code className={ICON} />
       </ToolbarButton>
-
-      {/* TaskList */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleTaskList().run()}
-        active={editor.isActive('taskList')}
-        title="任务列表"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} label="代码块">
+        <SquareCode className={ICON} />
       </ToolbarButton>
-
-      <Divider />
-
-      {/* Blockquote */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        active={editor.isActive('blockquote')}
-        title="引用"
-      >
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().setDetails().run()} active={editor.isActive('details')} label="折叠块">
+        <ListCollapse className={ICON} />
       </ToolbarButton>
-
-      {/* CodeBlock */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        active={editor.isActive('codeBlock')}
-        title="代码块"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-        </svg>
+      <ToolbarButton onClick={() => editor.chain().focus().setHorizontalRule().run()} label="分隔线">
+        <Minus className={ICON} />
       </ToolbarButton>
-
-      {/* HorizontalRule */}
-      <ToolbarButton
-        onClick={() => editor.chain().focus().setHorizontalRule().run()}
-        title="分隔线"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
-        </svg>
-      </ToolbarButton>
-
       <Divider />
 
       {/* Link */}
-      <div className="relative">
-        <ToolbarButton
-          onClick={() => {
-            setShowLinkInput((v) => !v)
-            if (!showLinkInput) setLinkUrl(editor.getAttributes('link').href || '')
-          }}
-          active={editor.isActive('link')}
-          title="链接"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-          </svg>
-        </ToolbarButton>
-        {showLinkInput && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-56">
-            <form onSubmit={handleLinkSubmit} className="flex items-center gap-1">
+      <ToolbarMenu label="链接" width="w-60" active={editor.isActive('link')} icon={<LinkIcon className={ICON} />}>
+        {(close) => (
+          <div className="px-2 py-1">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (linkUrl) editor.chain().focus().setLink({ href: linkUrl }).run()
+                else editor.chain().focus().unsetLink().run()
+                setLinkUrl('')
+                close()
+              }}
+              className="flex items-center gap-1"
+            >
               <input
                 type="url"
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
                 placeholder="https://..."
                 autoFocus
-                className="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                aria-label="链接地址"
+                className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
-              <button type="submit" className="px-2 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition">
+              <button type="submit" className="rounded bg-indigo-600 px-2 py-1.5 text-xs text-white transition hover:bg-indigo-700">
                 确认
               </button>
             </form>
             {editor.isActive('link') && (
               <button
-                onClick={() => { editor.chain().focus().unsetLink().run(); setShowLinkInput(false) }}
-                className="mt-1 w-full text-xs text-red-500 hover:text-red-700 py-0.5"
+                type="button"
+                onClick={() => { editor.chain().focus().unsetLink().run(); close() }}
+                className="mt-1 w-full py-0.5 text-xs text-red-500 transition hover:text-red-700"
               >
                 移除链接
               </button>
             )}
           </div>
         )}
-      </div>
-
-      {/* Image — insert from URL or upload local file */}
-      <div className="relative" ref={imageMenuRef}>
-        <ToolbarButton
-          onClick={() => setShowImageMenu((v) => !v)}
-          disabled={isUploading}
-          title="插入图片"
-        >
-          {isUploading ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+      </ToolbarMenu>
+      {/* Image: upload or URL */}
+      <ToolbarMenu
+        label={isUploading ? '正在上传图片' : '插入图片'}
+        width="w-64"
+        icon={
+          isUploading ? (
+            <svg className={`${ICON} animate-spin`} fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
           ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          )}
-        </ToolbarButton>
-        {showImageMenu && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-64">
+            <ImageIcon className={ICON} />
+          )
+        }
+      >
+        {(close) => (
+          <div className="px-2 py-1">
             {onFileUpload && (
               <>
+                {/* The file is read before `close()`, which unmounts this input:
+                    reaching through the event afterwards would be reading a
+                    detached node. */}
                 <input
                   ref={imageFileInputRef}
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={handleImageFileSelected}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    event.target.value = ''
+                    close()
+                    if (file) void uploadPickedImage(file)
+                  }}
                 />
                 <button
                   type="button"
                   onClick={() => imageFileInputRef.current?.click()}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded transition"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-gray-700 transition hover:bg-gray-100"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
+                  <ImageIcon className="h-4 w-4 text-gray-400" />
                   上传本地图片
                 </button>
                 <div className="my-1 border-t border-gray-100" />
               </>
             )}
-            <form onSubmit={handleInsertImageUrl} className="flex items-center gap-1">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (imageUrl) editor.chain().focus().setImage({ src: imageUrl }).run()
+                setImageUrl('')
+                close()
+              }}
+              className="flex items-center gap-1"
+            >
               <input
                 type="url"
                 value={imageUrl}
                 onChange={(e) => setImageUrl(e.target.value)}
                 placeholder="粘贴图片 URL..."
-                autoFocus
-                className="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                aria-label="图片地址"
+                className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
-              <button type="submit" className="px-2 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition">
+              <button type="submit" className="rounded bg-indigo-600 px-2 py-1.5 text-xs text-white transition hover:bg-indigo-700">
                 插入
               </button>
             </form>
           </div>
         )}
-      </div>
-
-      {/* Video embed. The URL is host-checked; a rejected one says so rather
-          than inserting an empty frame. */}
-      <div className="relative" ref={embedRef}>
-        <ToolbarButton onClick={() => setShowEmbed((v) => !v)} title="嵌入视频">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-        </ToolbarButton>
-        {showEmbed && (
-          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-72">
-            <form onSubmit={handleInsertEmbed} className="flex items-center gap-1">
+      </ToolbarMenu>
+      {/* Video embed. The URL is host-checked; a rejected one says so rather than
+          inserting an empty frame. */}
+      <ToolbarMenu label="嵌入视频" width="w-72" icon={<Video className={ICON} />}>
+        {(close) => (
+          <div className="px-2 py-1">
+            <form onSubmit={insertEmbed(close)} className="flex items-center gap-1">
               <input
                 type="url"
                 value={embedUrl}
                 onChange={(e) => { setEmbedUrl(e.target.value); setEmbedError('') }}
                 placeholder="B 站 / YouTube / 腾讯视频 / Vimeo 链接"
                 autoFocus
-                className="flex-1 min-w-0 text-xs px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                aria-label="视频链接"
+                className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
-              <button type="submit" className="px-2 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition">
+              <button type="submit" className="rounded bg-indigo-600 px-2 py-1.5 text-xs text-white transition hover:bg-indigo-700">
                 嵌入
               </button>
             </form>
             {embedError && <p className="mt-1 text-xs text-red-600">{embedError}</p>}
           </div>
         )}
-      </div>
+      </ToolbarMenu>
 
-      {/* Collapsible block — 飞书's 折叠块 */}
       <ToolbarButton
-        onClick={() => editor.chain().focus().setDetails().run()}
-        active={editor.isActive('details')}
-        title="折叠块"
+        onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        label="插入表格"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
+        <TableIcon className={ICON} />
       </ToolbarButton>
-
-      {/* Table */}
-      <ToolbarButton onClick={handleInsertTable} title="插入表格">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 3v18M14 3v18" />
-        </svg>
-      </ToolbarButton>
-
-      {/* Table operations (shown when inside table) */}
-      {editor.isActive('table') && (
+      {/* Table controls.
+          Previously fifteen flat controls, six of which were bare Chinese words
+          ("+列前", "表头列", "均分", "删表") and three of which were the box-drawing
+          glyphs ⌜ ⌷ ⌞ — unreadable as icons and cramped enough to wrap the
+          toolbar onto a second line. Google Docs and 飞书 both put table editing
+          behind a small number of menus instead, because these operations need
+          words, not pictograms. Three menus, one icon button, everything labelled.
+          The same operations remain on the right-click menu. */}
+      {inTable && (
         <>
           <Divider />
-          <ToolbarButton
-            onClick={() => editor.chain().focus().addColumnBefore().run()}
-            title="左侧插入列"
-          >
-            <span className="text-xs font-medium">+列前</span>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().addColumnAfter().run()}
-            title="右侧插入列"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4m6-18h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M9 3v18M15 3v18" />
-            </svg>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().addRowBefore().run()}
-            title="上方插入行"
-          >
-            <span className="text-xs font-medium">+行上</span>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().addRowAfter().run()}
-            title="下方插入行"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9h18M3 15h18M9 3v18M15 3v18" />
-            </svg>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().deleteColumn().run()}
-            title="删除当前列"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().deleteRow().run()}
-            title="删除当前行"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().mergeOrSplit().run()}
-            disabled={!editor.can().mergeOrSplit()}
-            title="合并 / 拆分单元格（先拖选多个单元格）"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5h16M4 19h16M9 9l3 3-3 3m6-6l-3 3 3 3" />
-            </svg>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().toggleHeaderRow().run()}
-            title="切换表头行"
-          >
-            <span className="text-xs font-medium">表头</span>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => editor.chain().focus().toggleHeaderColumn().run()}
-            title="切换表头列"
-          >
-            <span className="text-xs font-medium">表头列</span>
-          </ToolbarButton>
 
-          {/* Distribute columns evenly — 飞书's 均分列宽. Dragging one border
-              inevitably leaves the rest lopsided, and until now a botched drag
-              could only be undone. */}
-          <ToolbarButton
-            onClick={() => editor.chain().focus().distributeTableColumns().run()}
-            title="均分列宽"
-          >
-            <span className="text-xs font-medium">均分</span>
-          </ToolbarButton>
-
-          {/* Cell fill colour — 飞书/Notion both have this; stock TipTap has no
-              attribute for it, see TableCellAttributes. */}
-          <div className="relative" ref={cellFillRef}>
-            <button
-              type="button"
-              onClick={() => setShowCellFill((v) => !v)}
-              title="单元格填充色"
-              className={`h-7 px-1.5 flex items-center gap-1 rounded text-xs transition ${
-                showCellFill ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <span className="w-3.5 h-3.5 rounded border border-gray-300" style={{ backgroundColor: '#dbeafe' }} />
-              填充
-            </button>
-            {showCellFill && (
-              <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-44">
-                <p className="text-xs text-gray-400 mb-1.5 px-1">单元格填充</p>
-                <div className="grid grid-cols-4 gap-1">
-                  {CELL_FILL_COLORS.map((c) => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      title={c.label}
-                      onClick={() => {
-                        editor
-                          .chain()
-                          .focus()
-                          .setCellAttribute('backgroundColor', c.value || null)
-                          .run()
-                        setShowCellFill(false)
-                      }}
-                      className="w-8 h-8 rounded border border-gray-200 hover:scale-110 transition-transform flex items-center justify-center"
-                      style={{ backgroundColor: c.value || '#ffffff' }}
-                    >
-                      {!c.value && <span className="text-xs text-gray-400">✕</span>}
-                    </button>
+          <ToolbarMenu label="行操作" text="行" icon={<Rows3 className="h-3.5 w-3.5" />} width="w-40">
+            {(close) => (
+              <>
+                <MenuItem icon={<ArrowUpToLine className="h-3.5 w-3.5" />} label="上方插入行" onClick={() => { editor.chain().focus().addRowBefore().run(); close() }} />
+                <MenuItem icon={<ArrowDownToLine className="h-3.5 w-3.5" />} label="下方插入行" onClick={() => { editor.chain().focus().addRowAfter().run(); close() }} />
+                <MenuDivider />
+                <MenuItem icon={<ChevronUp className="h-3.5 w-3.5" />} label="上移一行" disabled={!editor.can().moveRowUp()} onClick={() => { editor.chain().focus().moveRowUp().run(); close() }} />
+                <MenuItem icon={<ChevronDown className="h-3.5 w-3.5" />} label="下移一行" disabled={!editor.can().moveRowDown()} onClick={() => { editor.chain().focus().moveRowDown().run(); close() }} />
+                <MenuSection label="行高（也可拖拽行下边框）">
+                  {ROW_HEIGHT_OPTIONS.map((option) => (
+                    <MenuItem
+                      key={option.label}
+                      icon={<MoveVertical className="h-3.5 w-3.5" />}
+                      label={option.label}
+                      onClick={() => { editor.chain().focus().setTableRowHeight(option.value).run(); close() }}
+                    />
                   ))}
-                </div>
-              </div>
+                </MenuSection>
+                <MenuDivider />
+                <MenuItem icon={<Trash2 className="h-3.5 w-3.5" />} label="删除当前行" danger onClick={() => { editor.chain().focus().deleteRow().run(); close() }} />
+              </>
             )}
-          </div>
+          </ToolbarMenu>
 
-          {/* Vertical alignment. Horizontal alignment is the existing TextAlign
-              buttons acting on the cell's paragraph — one mechanism, not two. */}
-          {VERTICAL_ALIGN_OPTIONS.map((option) => (
-            <ToolbarButton
-              key={option.value}
-              onClick={() => editor.chain().focus().setCellAttribute('verticalAlign', option.value).run()}
-              title={option.label}
-            >
-              <span className="text-xs leading-none">
-                {option.value === 'top' ? '⌜' : option.value === 'middle' ? '⌷' : '⌞'}
-              </span>
-            </ToolbarButton>
-          ))}
-
-          {/* Row height — presets; the same value can also be set by dragging a
-              row's bottom border in the editor. */}
-          <div className="relative" ref={rowHeightRef}>
-            <button
-              type="button"
-              onClick={() => setShowRowHeight((v) => !v)}
-              title="行高（也可拖拽行的下边框调整）"
-              className={`h-7 px-1.5 flex items-center gap-1 rounded text-xs transition ${
-                showRowHeight ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7l4-4 4 4M8 17l4 4 4-4M4 12h16" />
-              </svg>
-              行高
-            </button>
-            {showRowHeight && (
-              <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-36 py-1">
-                {ROW_HEIGHT_OPTIONS.map((option) => (
-                  <button
-                    key={option.label}
-                    type="button"
-                    onClick={() => {
-                      editor.chain().focus().setTableRowHeight(option.value).run()
-                      setShowRowHeight(false)
+          <ToolbarMenu label="列操作" text="列" icon={<Columns3 className="h-3.5 w-3.5" />} width="w-40">
+            {(close) => (
+              <>
+                <MenuItem icon={<ArrowLeftToLine className="h-3.5 w-3.5" />} label="左侧插入列" onClick={() => { editor.chain().focus().addColumnBefore().run(); close() }} />
+                <MenuItem icon={<ArrowRightToLine className="h-3.5 w-3.5" />} label="右侧插入列" onClick={() => { editor.chain().focus().addColumnAfter().run(); close() }} />
+                <MenuDivider />
+                <MenuItem icon={<ChevronLeft className="h-3.5 w-3.5" />} label="左移一列" disabled={!editor.can().moveColumnLeft()} onClick={() => { editor.chain().focus().moveColumnLeft().run(); close() }} />
+                <MenuItem icon={<ChevronRight className="h-3.5 w-3.5" />} label="右移一列" disabled={!editor.can().moveColumnRight()} onClick={() => { editor.chain().focus().moveColumnRight().run(); close() }} />
+                <MenuDivider />
+                <MenuItem icon={<StretchHorizontal className="h-3.5 w-3.5" />} label="均分列宽" onClick={() => { editor.chain().focus().distributeTableColumns().run(); close() }} />
+                <MenuDivider />
+                <MenuItem icon={<Trash2 className="h-3.5 w-3.5" />} label="删除当前列" danger onClick={() => { editor.chain().focus().deleteColumn().run(); close() }} />
+              </>
+            )}
+          </ToolbarMenu>
+          <ToolbarMenu label="单元格" text="单元格" icon={<Grid2x2 className="h-3.5 w-3.5" />} width="w-48">
+            {(close) => (
+              <>
+                <MenuItem
+                  icon={<TableColumnsSplit className="h-3.5 w-3.5" />}
+                  label="合并 / 拆分单元格"
+                  disabled={!editor.can().mergeOrSplit()}
+                  onClick={() => { editor.chain().focus().mergeOrSplit().run(); close() }}
+                />
+                <MenuDivider />
+                <MenuItem icon={<PanelTop className="h-3.5 w-3.5" />} label="切换表头行" onClick={() => { editor.chain().focus().toggleHeaderRow().run(); close() }} />
+                <MenuItem icon={<PanelLeft className="h-3.5 w-3.5" />} label="切换表头列" onClick={() => { editor.chain().focus().toggleHeaderColumn().run(); close() }} />
+                <MenuSection label="垂直对齐">
+                  <MenuItem icon={<AlignVerticalJustifyStart className="h-3.5 w-3.5" />} label="顶端对齐" onClick={() => { editor.chain().focus().setCellAttribute('verticalAlign', 'top').run(); close() }} />
+                  <MenuItem icon={<AlignVerticalJustifyCenter className="h-3.5 w-3.5" />} label="垂直居中" onClick={() => { editor.chain().focus().setCellAttribute('verticalAlign', 'middle').run(); close() }} />
+                  <MenuItem icon={<AlignVerticalJustifyEnd className="h-3.5 w-3.5" />} label="底端对齐" onClick={() => { editor.chain().focus().setCellAttribute('verticalAlign', 'bottom').run(); close() }} />
+                </MenuSection>
+                <MenuSection label="填充色">
+                  <Swatches
+                    colors={CELL_FILL_COLORS}
+                    onPick={(value) => {
+                      editor.chain().focus().setCellAttribute('backgroundColor', value || null).run()
+                      close()
                     }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 transition"
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+                  />
+                </MenuSection>
+              </>
             )}
-          </div>
+          </ToolbarMenu>
 
-          <ToolbarButton
-            onClick={() => editor.chain().focus().deleteTable().run()}
-            title="删除表格"
-          >
-            <span className="text-xs text-red-500 font-medium">删表</span>
+          <ToolbarButton onClick={() => editor.chain().focus().deleteTable().run()} label="删除表格" danger>
+            <Trash2 className={ICON} />
           </ToolbarButton>
         </>
       )}
-
-      {/* Source / Preview toggle */}
       {onSourceModeChange && (
-        <button
-          type="button"
-          onClick={() => onSourceModeChange(!sourceMode)}
-          title={sourceMode ? '切换到富文本模式' : '查看/编辑源码'}
-          className={`h-7 px-2 flex items-center gap-1 rounded text-xs transition ml-1 ${
-            sourceMode ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'
-          }`}
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-          </svg>
-          源码
-        </button>
+        <>
+          <Divider />
+          <Tooltip label={sourceMode ? '切换回富文本' : '查看 / 编辑源码'}>
+            <button
+              type="button"
+              onClick={() => onSourceModeChange(!sourceMode)}
+              aria-label={sourceMode ? '切换回富文本' : '查看 / 编辑源码'}
+              aria-pressed={sourceMode}
+              className={`flex h-7 items-center gap-1 rounded px-2 text-xs transition ${
+                sourceMode ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              <FileCode className="h-3.5 w-3.5" />
+              源码
+            </button>
+          </Tooltip>
+        </>
       )}
+
       <div className="flex-1" />
 
-      {/* Zoom controls */}
       {onZoomChange && (
-        <div className="flex items-center gap-1 ml-2">
-          <button
-            type="button"
-            onClick={() => onZoomChange(Math.max(50, ZOOM_LEVELS[ZOOM_LEVELS.indexOf(zoom) - 1] ?? 50))}
-            className="p-1 rounded hover:bg-gray-100 text-gray-500 transition"
-            title="缩小"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <span className="text-xs text-gray-500 w-10 text-center">{zoom}%</span>
-          <button
-            type="button"
-            onClick={() => onZoomChange(Math.min(200, ZOOM_LEVELS[ZOOM_LEVELS.indexOf(zoom) + 1] ?? 200))}
-            className="p-1 rounded hover:bg-gray-100 text-gray-500 transition"
-            title="放大"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
+        <div className="ml-2 flex items-center gap-1">
+          <Tooltip label="缩小" placement="bottom">
+            <button
+              type="button"
+              onClick={() => onZoomChange(Math.max(50, ZOOM_LEVELS[ZOOM_LEVELS.indexOf(zoom) - 1] ?? 50))}
+              aria-label="缩小"
+              className="rounded p-1 text-gray-500 transition hover:bg-gray-100"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+          <span className="w-10 text-center text-xs text-gray-500">{zoom}%</span>
+          <Tooltip label="放大" placement="bottom">
+            <button
+              type="button"
+              onClick={() => onZoomChange(Math.min(200, ZOOM_LEVELS[ZOOM_LEVELS.indexOf(zoom) + 1] ?? 200))}
+              aria-label="放大"
+              className="rounded p-1 text-gray-500 transition hover:bg-gray-100"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
         </div>
       )}
     </div>
   )
 }
+
+
+
+
+
