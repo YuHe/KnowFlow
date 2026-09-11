@@ -11,6 +11,8 @@ import { ResizableTableRow } from './TableRowHeight'
 import { TableColumnWidth, TABLE_CELL_MIN_WIDTH } from './TableColumnWidth'
 import { TableDeleteShortcuts } from './TableDeleteShortcuts'
 import TableContextMenu, { type TableContextMenuPosition } from './TableContextMenu'
+import { SearchAndReplace } from './SearchAndReplace'
+import FindReplacePanel from './FindReplacePanel'
 import { TrailingNode } from './TrailingNode'
 import { StyledTableCell, StyledTableHeader } from './TableCellAttributes'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
@@ -219,6 +221,8 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   // A pasted standalone HTML document awaiting the user's choice.
   // Right-click table menu, positioned at the pointer.
   const [tableMenu, setTableMenu] = useState<TableContextMenuPosition | null>(null)
+  // null = closed; `replace` remembers which field to focus on open.
+  const [findPanel, setFindPanel] = useState<{ replace: boolean } | null>(null)
   const [htmlPrompt, setHtmlPrompt] = useState<{
     text: string
     canBecomeDocument: boolean
@@ -230,6 +234,33 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   useEffect(() => {
     return () => mdAbortRef.current?.abort()
   }, [])
+
+  /**
+   * Ctrl/Cmd+F to find, Ctrl/Cmd+Shift+H to open with replace focused.
+   *
+   * Overriding the browser's own find is what 飞书 and Google Docs both do: the
+   * in-document search is the one that can also replace, and the browser's cannot
+   * reach collapsed or virtualised content. Only bound while this editor is
+   * mounted and editable, so reading pages keep the native behaviour.
+   */
+  useEffect(() => {
+    if (!editable) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey
+      if (!mod) return
+      const key = event.key.toLowerCase()
+      if (key === 'f') {
+        event.preventDefault()
+        setFindPanel({ replace: false })
+      } else if (key === 'h' && event.shiftKey) {
+        event.preventDefault()
+        setFindPanel({ replace: true })
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [editable])
+
 
   const handleImageUpload = useCallback(
     async (file: File): Promise<string | null> => {
@@ -336,6 +367,9 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       // Backspace/Delete removes an *empty* table. Upstream only handles the
       // all-cells-selected case, which left a table hard to get rid of.
       TableDeleteShortcuts,
+      // Find & replace. 飞书 and Google Docs both have it; its absence here was
+      // conspicuous.
+      SearchAndReplace,
       CodeBlockLowlight.configure({ lowlight }),
       Placeholder.configure({ placeholder: '开始输入，或输入 / 来插入内容...' }),
       TaskList,
@@ -593,6 +627,13 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       <FailedImagesNotice images={mdFailures} onDismiss={() => setMdFailures([])} />
       {tableMenu && editor && (
         <TableContextMenu editor={editor} position={tableMenu} onClose={() => setTableMenu(null)} />
+      )}
+      {findPanel && editor && (
+        <FindReplacePanel
+          editor={editor}
+          replaceMode={findPanel.replace}
+          onClose={() => setFindPanel(null)}
+        />
       )}
       {/* Pasted/dropped images upload before they can be inserted. Without this
           the paste looks like it silently did nothing. */}

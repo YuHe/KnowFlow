@@ -759,3 +759,18 @@
 
 .ProseMirror pre code .hljs-strong,
 .doc-content pre code .hljs-strong { font-weight: 600; }
+
+/* ── Find & replace highlights ─────────────────────────────────────────────
+   Applied by the SearchAndReplace plugin as decorations. Outside @layer for the
+   same reason as the gapcursor and hljs rules: these class names exist only at
+   runtime, and Tailwind drops layered rules whose classes never appear in the
+   scanned source. */
+.ProseMirror .search-match {
+  background-color: #fde68a;
+  border-radius: 2px;
+}
+
+.ProseMirror .search-match-current {
+  background-color: #fb923c;
+  box-shadow: 0 0 0 1px #ea580c;
+}
