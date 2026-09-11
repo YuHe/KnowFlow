@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { sanitizeHtml } from '@/utils/sanitize'
+import { scopeReportStyles, SHADOW_BASE_STYLES } from '@/utils/htmlDocumentStyles'
 
 /**
  * Render a standalone HTML document faithfully, inside a shadow root.
@@ -58,7 +59,24 @@ export default function HtmlDocumentViewer({ html, className }: HtmlDocumentView
     }
 
     setIsolationFailed(false)
-    shadowRef.current.innerHTML = sanitizeHtml(html)
+    const shadow = shadowRef.current
+    shadow.innerHTML = sanitizeHtml(html)
+
+    // A shadow root scopes style rules, but `:root`, `html` and `body` match
+    // nothing inside one — a report that puts its custom properties on `:root`
+    // and its background on `body` would render unstyled. Rewrite those to
+    // `:host`. Done here on the live elements rather than on the stored markup:
+    // nothing is persisted, so the rule can change and every document, old and
+    // new, picks it up on the next render.
+    for (const styleEl of Array.from(shadow.querySelectorAll('style'))) {
+      const scoped = scopeReportStyles(styleEl.textContent ?? '')
+      if (scoped !== styleEl.textContent) styleEl.textContent = scoped
+    }
+
+    // Prepended, so the report's own rules still win on specificity ties.
+    const base = document.createElement('style')
+    base.textContent = SHADOW_BASE_STYLES
+    shadow.insertBefore(base, shadow.firstChild)
   }, [html])
 
   return (
