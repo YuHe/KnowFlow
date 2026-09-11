@@ -11,6 +11,9 @@ import { ResizableTableRow } from './TableRowHeight'
 import { TableColumnWidth, TABLE_CELL_MIN_WIDTH } from './TableColumnWidth'
 import { TableDeleteShortcuts } from './TableDeleteShortcuts'
 import { TableMove } from './TableMove'
+import { Superscript, Subscript } from './ScriptMarks'
+import { Details, DetailsSummary, DetailsContent } from './Details'
+import { Embed } from './Embed'
 import TableContextMenu, { type TableContextMenuPosition } from './TableContextMenu'
 import { SearchAndReplace } from './SearchAndReplace'
 import { SlashCommand } from './SlashCommand'
@@ -122,6 +125,26 @@ turndown.addRule('sizedImage', {
     node.nodeName === 'IMG' &&
     SIZED_IMAGE_ATTRS.some((attr) => Boolean((node as HTMLElement).getAttribute(attr))),
   replacement: (_content, node) => (node as HTMLElement).outerHTML,
+})
+
+// Markdown has no syntax for either script mark and GFM adds none, so keep the
+// tags. Without this the first autosave would silently drop them — the trap the
+// table attributes hit twice. `marked` passes inline HTML through and DOMPurify's
+// default profile allows both tags, so the round trip closes.
+turndown.addRule('scriptMarks', {
+  filter: ['sup', 'sub'],
+  replacement: (content, node) => `<${node.nodeName.toLowerCase()}>${content}</${node.nodeName.toLowerCase()}>`,
+})
+
+// A collapsible block and a video embed are both structures markdown cannot
+// express at all — emit them as raw HTML blocks, the same escape hatch the
+// merged-cell tables use. Blank lines around them are what makes marked treat
+// the result as block-level HTML rather than paragraph text.
+turndown.addRule('rawHtmlBlock', {
+  filter: (node) =>
+    node.nodeName === 'DETAILS' ||
+    (node.nodeName === 'DIV' && (node as HTMLElement).getAttribute('data-type') === 'embed'),
+  replacement: (_content, node) => `\n\n${(node as HTMLElement).outerHTML}\n\n`,
 })
 
 /** Convert HTML to Markdown */
@@ -361,6 +384,16 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       TextStyle,
       Color,
       FontSize,
+      // Above and below the baseline: m², H₂O, footnote markers.
+      Superscript,
+      Subscript,
+      // Collapsible block, on real <details>/<summary> so it also collapses in
+      // every read-only path (viewer, share link, exported PDF) with no script.
+      Details,
+      DetailsSummary,
+      DetailsContent,
+      // Video embeds, restricted to an allow-list of hosts.
+      Embed,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       // The `/` menu. The placeholder has been advertising it ("输入 / 来插入
       // 内容") since before it was ever registered.

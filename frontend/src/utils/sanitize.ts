@@ -1,4 +1,5 @@
 import DOMPurify, { type Config } from 'dompurify'
+import { isAllowedEmbedUrl } from './embed'
 
 /**
  * Sanitize untrusted HTML before injecting into the DOM via
@@ -26,7 +27,7 @@ const config: Config = {
   // Use a permissive allow-list approach: start from the default profile and
   // ADD the mermaid/SVG/extras rather than redefining ALLOWED_TAGS from scratch
   // (which would drop many legit tags the editor emits).
-  ADD_TAGS: [...SVG_TAGS, 'col', 'colgroup', 'mark', 'del', 's', 'strike'],
+  ADD_TAGS: [...SVG_TAGS, 'col', 'colgroup', 'mark', 'del', 's', 'strike', 'iframe'],
   ADD_ATTR: [
     // SVG / mermaid
     'viewBox', 'xmlns', 'xmlns:xlink', 'xlink:href', 'preserveAspectRatio',
@@ -45,6 +46,9 @@ const config: Config = {
     'span', 'align', 'valign', 'colwidth',
     // image
     'alt', 'title', 'src', 'target', 'rel',
+    // video embeds. `iframe` is allowed only for the hosts in utils/embed —
+    // enforced by dropEmbedsFromDisallowedHosts below, not by this list.
+    'allow', 'allowfullscreen', 'frameborder', 'loading', 'referrerpolicy', 'sandbox',
   ],
   ALLOW_DATA_ATTR: true,
   ALLOW_ARIA_ATTR: true,
@@ -57,6 +61,25 @@ const config: Config = {
 }
 
 /**
+ * Remove every `<iframe>` whose src is not one we would have written ourselves.
+ *
+ * DOMPurify's allow-list works on tag and attribute *names*, so once `iframe` is
+ * allowed at all it is allowed to point anywhere — at a login page to be framed
+ * over the document, or at a tracker. The host check therefore has to run here,
+ * on the value, and it has to run in the sanitizer rather than only in the editor:
+ * stored HTML reaches the read view, share links and the public knowledge base
+ * without passing through the editor at all.
+ *
+ * The whole element goes, not just the attribute: an iframe with no src renders
+ * as an empty box, which reads as a broken document rather than a removed one.
+ */
+function dropDisallowedEmbeds(root: ParentNode): void {
+  for (const frame of Array.from(root.querySelectorAll('iframe'))) {
+    if (!isAllowedEmbedUrl(frame.getAttribute('src'))) frame.remove()
+  }
+}
+
+/**
  * Sanitize an HTML string for safe DOM insertion.
  *
  * Keeps `<style>` — required both by mermaid's inline SVG and by a standalone
@@ -65,7 +88,11 @@ const config: Config = {
  * `sanitizeForLightDom` instead.
  */
 export function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html, config)
+  const clean = DOMPurify.sanitize(html, config)
+  if (!clean.includes('<iframe')) return clean
+  const doc = new DOMParser().parseFromString(clean, 'text/html')
+  dropDisallowedEmbeds(doc.body)
+  return doc.body.innerHTML
 }
 
 /** Elements that restyle or re-target the whole page from wherever they sit. */
@@ -97,5 +124,6 @@ export function sanitizeForLightDom(html: string): string {
       el.remove()
     }
   }
+  dropDisallowedEmbeds(doc.body)
   return doc.body.innerHTML
 }

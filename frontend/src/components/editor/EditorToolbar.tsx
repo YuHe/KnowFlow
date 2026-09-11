@@ -178,6 +178,9 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const [showRowHeight, setShowRowHeight] = useState(false)
   const [showCellFill, setShowCellFill] = useState(false)
   const [showFontSize, setShowFontSize] = useState(false)
+  const [showEmbed, setShowEmbed] = useState(false)
+  const [embedUrl, setEmbedUrl] = useState('')
+  const [embedError, setEmbedError] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const colorPickerRef = useRef<HTMLDivElement>(null)
@@ -187,10 +190,11 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const rowHeightRef = useRef<HTMLDivElement>(null)
   const cellFillRef = useRef<HTMLDivElement>(null)
   const fontSizeRef = useRef<HTMLDivElement>(null)
+  const embedRef = useRef<HTMLDivElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight && !showCellFill && !showFontSize) return
+    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight && !showCellFill && !showFontSize && !showEmbed) return
     const handle = (e: MouseEvent) => {
       if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setShowColorPicker(false)
@@ -213,10 +217,13 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
       if (showFontSize && fontSizeRef.current && !fontSizeRef.current.contains(e.target as Node)) {
         setShowFontSize(false)
       }
+      if (showEmbed && embedRef.current && !embedRef.current.contains(e.target as Node)) {
+        setShowEmbed(false)
+      }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight, showCellFill, showFontSize])
+  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight, showCellFill, showFontSize, showEmbed])
 
   if (!editor) return null
 
@@ -240,8 +247,26 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
     setShowImageMenu(false)
   }
 
-  const handleImageFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  /**
+   * Insert an embed, or say why not.
+   *
+   * `setEmbed` returns false for a host that is not on the allow-list, and that
+   * is the only feedback the command gives — without surfacing it, an unsupported
+   * link would look like a dead button.
+   */
+  const handleInsertEmbed = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!embedUrl.trim()) return
+    if (!editor.chain().focus().setEmbed(embedUrl.trim()).run()) {
+      setEmbedError('暂不支持这个链接，目前可嵌入 B 站、YouTube、腾讯视频、Vimeo')
+      return
+    }
+    setEmbedUrl('')
+    setEmbedError('')
+    setShowEmbed(false)
+  }
+
+  const handleImageFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {    const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !onFileUpload) return
     if (!file.type.startsWith('image/')) return
@@ -428,6 +453,24 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
         title="删除线"
       >
         <span className="line-through text-sm">S</span>
+      </ToolbarButton>
+
+      {/* Superscript / Subscript. The two exclude each other, so the active
+          states are mutually exclusive by construction. */}
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleSuperscript().run()}
+        active={editor.isActive('superscript')}
+        title="上标 (Ctrl+.)"
+      >
+        <span className="text-sm">x²</span>
+      </ToolbarButton>
+
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleSubscript().run()}
+        active={editor.isActive('subscript')}
+        title="下标 (Ctrl+,)"
+      >
+        <span className="text-sm">x₂</span>
       </ToolbarButton>
 
       {/* Highlight — multi-color picker */}
@@ -728,6 +771,45 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
           </div>
         )}
       </div>
+
+      {/* Video embed. The URL is host-checked; a rejected one says so rather
+          than inserting an empty frame. */}
+      <div className="relative" ref={embedRef}>
+        <ToolbarButton onClick={() => setShowEmbed((v) => !v)} title="嵌入视频">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </ToolbarButton>
+        {showEmbed && (
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-72">
+            <form onSubmit={handleInsertEmbed} className="flex items-center gap-1">
+              <input
+                type="url"
+                value={embedUrl}
+                onChange={(e) => { setEmbedUrl(e.target.value); setEmbedError('') }}
+                placeholder="B 站 / YouTube / 腾讯视频 / Vimeo 链接"
+                autoFocus
+                className="flex-1 min-w-0 text-xs px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <button type="submit" className="px-2 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition">
+                嵌入
+              </button>
+            </form>
+            {embedError && <p className="mt-1 text-xs text-red-600">{embedError}</p>}
+          </div>
+        )}
+      </div>
+
+      {/* Collapsible block — 飞书's 折叠块 */}
+      <ToolbarButton
+        onClick={() => editor.chain().focus().setDetails().run()}
+        active={editor.isActive('details')}
+        title="折叠块"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </ToolbarButton>
 
       {/* Table */}
       <ToolbarButton onClick={handleInsertTable} title="插入表格">

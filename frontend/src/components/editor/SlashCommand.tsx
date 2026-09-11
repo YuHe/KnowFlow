@@ -129,6 +129,14 @@ export function buildCommandItems(options: SlashCommandOptions = {}): SlashComma
         editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
     },
     {
+      title: '折叠块',
+      description: '可展开收起的内容',
+      icon: '▸',
+      keywords: ['toggle', 'details', 'collapse', 'fold', 'zhedie'],
+      command: ({ editor, range }) =>
+        editor.chain().focus().deleteRange(range).setDetails().run(),
+    },
+    {
       title: '引用',
       description: '引用块',
       icon: '❝',
