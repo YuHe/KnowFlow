@@ -130,38 +130,73 @@ describe('repairing the links', () => {
 })
 
 describe('the stylesheet', () => {
+  const css = async () => {
+    const fs = await import('node:fs/promises')
+    const path = await import('node:path')
+    return fs.readFile(path.resolve(process.cwd(), 'src/index.css'), 'utf-8')
+  }
+
+  /** The table-of-contents section, up to the next section heading. */
+  const tocBlock = async () => {
+    const all = await css()
+    const start = all.indexOf('In-document table of contents')
+    // Sections are delimited by the box-drawing comment banner; an inner `/*`
+    // comment inside this section must not end the slice.
+    const next = all.indexOf('/* ──', start + 40)
+    expect(next).toBeGreaterThan(start)
+    return all.slice(start, next)
+  }
+
   it('targets the tag, outside @layer so Tailwind cannot purge it', async () => {
     // `data-toc` is written at runtime and appears nowhere in the scanned source —
     // the same trap that silently dropped the gapcursor and hljs rules.
-    const fs = await import('node:fs/promises')
-    const path = await import('node:path')
-    const css = await fs.readFile(path.resolve(process.cwd(), 'src/index.css'), 'utf-8')
-    const at = css.indexOf("[data-toc='block']")
+    const all = await css()
+    const at = all.indexOf("[data-toc='block']")
     expect(at).toBeGreaterThan(-1)
     let depth = 0
     for (let i = 0; i < at; i++) {
-      if (css[i] === '{') depth++
-      else if (css[i] === '}') depth--
+      if (all[i] === '{') depth++
+      else if (all[i] === '}') depth--
     }
     expect(depth).toBe(0)
   })
 
   it('removes the bullets that made it read as body content', async () => {
-    const fs = await import('node:fs/promises')
-    const path = await import('node:path')
-    const css = await fs.readFile(path.resolve(process.cwd(), 'src/index.css'), 'utf-8')
-    const block = css.slice(css.indexOf('In-document table of contents'))
-    expect(block).toContain('list-style: none')
+    expect(await tocBlock()).toContain('list-style: none')
   })
 
   it('does not style the editor, where tagging would fight ProseMirror', async () => {
-    const fs = await import('node:fs/promises')
-    const path = await import('node:path')
-    const css = await fs.readFile(path.resolve(process.cwd(), 'src/index.css'), 'utf-8')
-    const start = css.indexOf('In-document table of contents')
-    const next = css.indexOf('/*', start + 40)
-    const block = css.slice(start, next === -1 ? undefined : next)
+    const block = await tocBlock()
     expect(block).toContain('[data-toc')
     expect(block).not.toContain('.ProseMirror')
+  })
+
+  it('matches the outline panel it is meant to look like', async () => {
+    // Both are navigation over the same headings, so the values are taken from
+    // OutlinePanel rather than picked again: text-xs / leading-snug / py-1 px-2 /
+    // rounded, gray-500 → gray-800 on a gray-100 row. Asserted because "looks
+    // like the outline" is otherwise a claim nothing checks.
+    const block = await tocBlock()
+    expect(block).toContain('font-size: 0.75rem')     // text-xs
+    expect(block).toContain('line-height: 1.375')     // leading-snug
+    expect(block).toContain('padding: 0.25rem 0.5rem') // py-1 px-2
+    expect(block).toContain('color: #6b7280')          // gray-500
+    expect(block).toContain('color: #1f2937')          // gray-800, on hover
+    expect(block).toContain('background-color: #f3f4f6') // gray-100, on hover
+  })
+
+  it('gives each entry a block-level row rather than inline-block', async () => {
+    // `display: inline-block` was the actual cause of the loose line spacing: it
+    // adds a descender's worth of leading to every line. A block row also makes
+    // the whole width hoverable, as in the panel.
+    const block = await tocBlock()
+    expect(block).toContain('display: block')
+    // A declaration, not the mention of it in the comment above.
+    expect(block).not.toMatch(/^\s*display: inline-block;/m)
+  })
+
+  it('sets no line-height on the list items, which is where the gap came from', async () => {
+    const block = await tocBlock()
+    expect(block).not.toMatch(/\[data-toc\] li \{[^}]*line-height/)
   })
 })

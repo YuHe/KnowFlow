@@ -840,80 +840,92 @@
    generic `.doc-content ul` and `a` rules and rendered as a full-width nested
    bullet list of underlined indigo links.
 
-   Styled as a quiet card rather than as body content: a TOC is navigation, so it
-   should read as chrome the eye can skip, which is what 飞书 and Notion both do
-   with theirs. Read view only — in the editor this content is a ProseMirror
-   document and must not be tagged. */
+   Deliberately the same visual language as OutlinePanel, the right-hand outline:
+   both are navigation over the same headings, so two different treatments is one
+   too many. Every value below is the one that component uses — text-xs,
+   leading-snug, py-1 px-2, rounded, gray-500 going to gray-800 on a gray-100
+   row — and the indent step matches its pl-2 / pl-5 / pl-8 ladder.
+
+   The loose spacing was mine, not the Markdown renderer's: `line-height: 1.7`
+   plus `display: inline-block` on each link, which adds a descender's worth of
+   leading to every line. Links are block-level here, so the padding is the row
+   and the hover target is the full width, exactly as in the panel.
+
+   Read view only — in the editor this content is a ProseMirror document and must
+   not be tagged. */
 .doc-content [data-toc='block'],
 .doc-content [data-toc='title'] {
   margin-top: 1.5rem;
-  border: 1px solid #e5e7eb;
-  border-bottom: 0;
-  border-radius: 0.5rem 0.5rem 0 0;
-  background-color: #fafafa;
-  padding: 0.625rem 1rem 0.375rem;
+  margin-bottom: 0;
+  border-radius: 0.375rem 0.375rem 0 0;
+  background-color: rgb(249 250 251 / 0.6);
+  padding: 0.625rem 0.75rem 0.25rem;
 }
 
 .doc-content [data-toc='block'] {
-  border-bottom: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
+  border-radius: 0.375rem;
+  margin-bottom: 1.5rem;
   padding-bottom: 0.625rem;
 }
 
+/* The panel's own heading: 大纲. */
 .doc-content h1[data-toc='title'],
 .doc-content h2[data-toc='title'],
 .doc-content h3[data-toc='title'],
 .doc-content h4[data-toc='title'] {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #6b7280;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
 }
 
 .doc-content [data-toc='list'] {
   margin-top: 0;
   margin-bottom: 1.5rem;
-  border: 1px solid #e5e7eb;
-  border-top: 0;
-  border-radius: 0 0 0.5rem 0.5rem;
-  background-color: #fafafa;
-  padding: 0.25rem 1rem 0.75rem;
+  border-radius: 0 0 0.375rem 0.375rem;
+  background-color: rgb(249 250 251 / 0.6);
+  padding: 0.375rem 0.75rem 0.625rem;
 }
 
-/* No bullets: the indentation already carries the hierarchy, and a nested dotted
-   list is exactly what made this look like body content. */
+/* No bullets: the indentation carries the hierarchy, and a nested dotted list is
+   what made this read as body content. */
 .doc-content [data-toc] ul,
 .doc-content [data-toc] ol,
-.doc-content ul[data-toc] {
+.doc-content ul[data-toc],
+.doc-content ol[data-toc] {
   list-style: none;
   margin: 0;
   padding-left: 0;
 }
 
+/* pl-2 → pl-5 → pl-8 in OutlinePanel, i.e. 0.75rem per level. */
 .doc-content [data-toc] ul ul,
 .doc-content [data-toc] ol ol,
 .doc-content [data-toc] ul ol,
 .doc-content [data-toc] ol ul {
-  padding-left: 1rem;
+  padding-left: 0.75rem;
 }
 
 .doc-content [data-toc] li {
   margin: 0;
-  line-height: 1.7;
 }
 
 .doc-content [data-toc] a {
-  display: inline-block;
-  font-size: 0.875rem;
-  color: #4b5563;
+  display: block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.375;
+  color: #6b7280;
   text-decoration: none;
-  transition: color 0.12s ease;
+  transition: color 0.12s ease, background-color 0.12s ease;
 }
 
 .doc-content [data-toc] a:hover {
-  color: #4f46e5;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: #1f2937;
+  background-color: #f3f4f6;
+  text-decoration: none;
 }
 
 /* ── Video embeds ──────────────────────────────────────────────────────────
