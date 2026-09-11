@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import type { Editor } from '@tiptap/react'
 import { ZoomIn, ZoomOut } from 'lucide-react'
+import { FONT_SIZES } from './FontSize'
 
 interface EditorToolbarProps {
   editor: Editor
@@ -176,6 +177,7 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const [showImageMenu, setShowImageMenu] = useState(false)
   const [showRowHeight, setShowRowHeight] = useState(false)
   const [showCellFill, setShowCellFill] = useState(false)
+  const [showFontSize, setShowFontSize] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const colorPickerRef = useRef<HTMLDivElement>(null)
@@ -184,10 +186,11 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const imageMenuRef = useRef<HTMLDivElement>(null)
   const rowHeightRef = useRef<HTMLDivElement>(null)
   const cellFillRef = useRef<HTMLDivElement>(null)
+  const fontSizeRef = useRef<HTMLDivElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight && !showCellFill) return
+    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight && !showCellFill && !showFontSize) return
     const handle = (e: MouseEvent) => {
       if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setShowColorPicker(false)
@@ -207,10 +210,13 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
       if (showCellFill && cellFillRef.current && !cellFillRef.current.contains(e.target as Node)) {
         setShowCellFill(false)
       }
+      if (showFontSize && fontSizeRef.current && !fontSizeRef.current.contains(e.target as Node)) {
+        setShowFontSize(false)
+      }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight, showCellFill])
+  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight, showCellFill, showFontSize])
 
   if (!editor) return null
 
@@ -266,6 +272,9 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
     return 0
   })()
   const currentHeadingLabel = HEADING_OPTIONS.find(h => h.level === currentHeadingLevel)?.label || '正文'
+
+  // The size on the textStyle mark at the caret, or '' when it inherits.
+  const currentFontSize: string = editor.getAttributes('textStyle').fontSize || ''
 
   return (
     <div className="border-b border-gray-200 sticky top-0 bg-white z-10 px-3 py-1.5 flex items-center gap-0.5 flex-wrap shadow-sm">
@@ -326,6 +335,57 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
                 style={{ fontSize: HEADING_FONT_SIZES[h.level] }}
               >
                 {h.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Divider />
+
+      {/* Font size. 飞书 and Google Docs both sit one next to the font controls;
+          Notion has none. Stored as an inline style on the textStyle mark, the
+          same way text colour already is. */}
+      <div className="relative" ref={fontSizeRef}>
+        <button
+          type="button"
+          onClick={() => setShowFontSize(v => !v)}
+          title="字号"
+          className="h-7 px-1.5 flex items-center justify-between gap-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-200 min-w-[52px]"
+        >
+          <span>{currentFontSize ? currentFontSize.replace('px', '') : '默认'}</span>
+          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showFontSize && (
+          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-24 py-1 max-h-64 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => {
+                editor.chain().focus().unsetFontSize().run()
+                setShowFontSize(false)
+              }}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition ${
+                currentFontSize ? 'text-gray-700' : 'text-indigo-600 font-semibold'
+              }`}
+            >
+              默认
+            </button>
+            {FONT_SIZES.map(size => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => {
+                  editor.chain().focus().setFontSize(size).run()
+                  setShowFontSize(false)
+                }}
+                className={`w-full text-left px-3 py-1.5 hover:bg-gray-50 transition ${
+                  currentFontSize === size ? 'text-indigo-600 font-semibold' : 'text-gray-700'
+                }`}
+                style={{ fontSize: size }}
+              >
+                {size.replace('px', '')}
               </button>
             ))}
           </div>

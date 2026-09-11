@@ -12,6 +12,7 @@ import { TableColumnWidth, TABLE_CELL_MIN_WIDTH } from './TableColumnWidth'
 import { TableDeleteShortcuts } from './TableDeleteShortcuts'
 import TableContextMenu, { type TableContextMenuPosition } from './TableContextMenu'
 import { SearchAndReplace } from './SearchAndReplace'
+import { SlashCommand } from './SlashCommand'
 import FindReplacePanel from './FindReplacePanel'
 import { TrailingNode } from './TrailingNode'
 import { StyledTableCell, StyledTableHeader } from './TableCellAttributes'
@@ -23,7 +24,7 @@ import CharacterCount from '@tiptap/extension-character-count'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import TextAlign from '@tiptap/extension-text-align'
-import { Extension } from '@tiptap/core'
+import { FontSize } from './FontSize'
 import { TextSelection } from '@tiptap/pm/state'
 import { createLowlight, common } from 'lowlight'
 import TurndownService from 'turndown'
@@ -142,28 +143,6 @@ export function documentMarkdown(doc: {
   if (stored) return stored
   return htmlToMarkdown(doc.content_html || '').trim()
 }
-
-// Extend TextStyle to also support fontSize attribute
-const FontSize = Extension.create({
-  name: 'fontSize',
-  addGlobalAttributes() {
-    return [
-      {
-        types: ['textStyle'],
-        attributes: {
-          fontSize: {
-            default: null,
-            parseHTML: (element) => element.style.fontSize || null,
-            renderHTML: (attributes) => {
-              if (!attributes.fontSize) return {}
-              return { style: `font-size: ${attributes.fontSize}` }
-            },
-          },
-        },
-      },
-    ]
-  },
-})
 
 const lowlight = createLowlight(common)
 
@@ -379,6 +358,9 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       Color,
       FontSize,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      // The `/` menu. The placeholder has been advertising it ("输入 / 来插入
+      // 内容") since before it was ever registered.
+      SlashCommand.configure({ uploadImage: handleImageUpload }),
       // Keeps a paragraph after a trailing block node so the caret always has
       // somewhere to go after pasting an image at the end of the document.
       TrailingNode,
