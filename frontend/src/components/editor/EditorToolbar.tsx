@@ -11,6 +11,54 @@ interface EditorToolbarProps {
   onFileUpload?: (file: File) => Promise<string | null>
 }
 
+/**
+ * Re-render this toolbar when the editor's state changes.
+ *
+ * Everything conditional here — `editor.isActive(...)` for the active
+ * highlights, `editor.can()` for disabled states, and the whole table control
+ * cluster which is gated on `isActive('table')` — is evaluated during render.
+ * But the toolbar is rendered by the *page*, not by the component that owns
+ * `useEditor`, so nothing re-rendered it when the selection moved: the page only
+ * re-renders when the document changes, via its word-count state.
+ *
+ * The visible consequence was that clicking into a table did not reveal the
+ * table controls (including delete-table) — you had to type a character first —
+ * and every active-state highlight lagged behind the cursor.
+ *
+ * Coalesced through rAF so a burst of transactions costs one render, not one per
+ * transaction. `transaction` covers content edits; `selectionUpdate` is the one
+ * that was missing.
+ */
+function useEditorRevision(editor: Editor | null): void {
+  const [, setRevision] = useState(0)
+
+  useEffect(() => {
+    if (!editor) return
+
+    let frame = 0
+    const bump = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        setRevision((n) => n + 1)
+      })
+    }
+
+    editor.on('transaction', bump)
+    editor.on('selectionUpdate', bump)
+    editor.on('focus', bump)
+    editor.on('blur', bump)
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      editor.off('transaction', bump)
+      editor.off('selectionUpdate', bump)
+      editor.off('focus', bump)
+      editor.off('blur', bump)
+    }
+  }, [editor])
+}
+
 const ToolbarButton: React.FC<{
   onClick: () => void
   active?: boolean
@@ -96,6 +144,9 @@ const ROW_HEIGHT_OPTIONS: { label: string; value: number | null }[] = [
 ]
 
 export default function EditorToolbar({ editor, zoom = 100, onZoomChange, sourceMode = false, onSourceModeChange, onFileUpload }: EditorToolbarProps) {
+  // Without this, every isActive/can() below is whatever it was at the last
+  // page-level render.
+  useEditorRevision(editor)
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [showColorPicker, setShowColorPicker] = useState(false)

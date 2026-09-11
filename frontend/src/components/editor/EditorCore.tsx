@@ -9,6 +9,7 @@ import { ResizableImage } from './ResizableImage'
 import Table from '@tiptap/extension-table'
 import { ResizableTableRow } from './TableRowHeight'
 import { TableColumnWidth, TABLE_CELL_MIN_WIDTH } from './TableColumnWidth'
+import { TableDeleteShortcuts } from './TableDeleteShortcuts'
 import { TrailingNode } from './TrailingNode'
 import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
@@ -327,6 +328,9 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       // Seeds colwidth so the table is fixed-width from the first render; the
       // last column is otherwise pinned to the container and undraggable.
       TableColumnWidth.configure({ cellMinWidth: TABLE_CELL_MIN_WIDTH }),
+      // Backspace/Delete removes an *empty* table. Upstream only handles the
+      // all-cells-selected case, which left a table hard to get rid of.
+      TableDeleteShortcuts,
       CodeBlockLowlight.configure({ lowlight }),
       Placeholder.configure({ placeholder: '开始输入，或输入 / 来插入内容...' }),
       TaskList,
