@@ -27,6 +27,10 @@ function makeEditor() {
     'toggleHeaderRow',
     'toggleHeaderColumn',
     'distributeTableColumns',
+    'moveRowUp',
+    'moveRowDown',
+    'moveColumnLeft',
+    'moveColumnRight',
     'setCellAttribute',
     'deleteTable',
   ]
@@ -39,7 +43,13 @@ function makeEditor() {
   chain.run = () => true
   const editor = {
     chain: () => chain,
-    can: () => ({ mergeOrSplit: () => true }),
+    can: () => ({
+      mergeOrSplit: () => true,
+      moveRowUp: () => true,
+      moveRowDown: () => true,
+      moveColumnLeft: () => true,
+      moveColumnRight: () => true,
+    }),
   }
   return { editor: editor as never, calls }
 }
@@ -63,6 +73,10 @@ describe('menu contents', () => {
       '右侧插入列',
       '删除当前行',
       '删除当前列',
+      '上移一行',
+      '下移一行',
+      '左移一列',
+      '右移一列',
       '合并 / 拆分单元格',
       '切换表头行',
       '切换表头列',
@@ -107,6 +121,31 @@ describe('running a command', () => {
     render(<TableContextMenu editor={editor} position={POSITION} onClose={onClose} />)
     fireEvent.click(screen.getByText('删除当前列'))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('dispatches a reorder', () => {
+    const { editor, calls } = makeEditor()
+    render(<TableContextMenu editor={editor} position={POSITION} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByText('右移一列'))
+    expect(calls).toContain('moveColumnRight')
+  })
+
+  it('greys out a reorder the editor refuses', () => {
+    // A swap that would tear a merged cell, or a move off the end of the table:
+    // the command returns false, and the item must not look clickable.
+    const { editor, calls } = makeEditor()
+    ;(editor as unknown as { can: () => Record<string, () => boolean> }).can = () => ({
+      mergeOrSplit: () => true,
+      moveRowUp: () => false,
+      moveRowDown: () => true,
+      moveColumnLeft: () => true,
+      moveColumnRight: () => true,
+    })
+    render(<TableContextMenu editor={editor} position={POSITION} onClose={vi.fn()} />)
+    const button = screen.getByText('上移一行').closest('button')!
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(calls).not.toContain('moveRowUp')
   })
 
   it('passes the colour through to setCellAttribute', () => {

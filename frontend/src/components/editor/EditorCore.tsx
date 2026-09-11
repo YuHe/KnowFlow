@@ -10,6 +10,7 @@ import Table from '@tiptap/extension-table'
 import { ResizableTableRow } from './TableRowHeight'
 import { TableColumnWidth, TABLE_CELL_MIN_WIDTH } from './TableColumnWidth'
 import { TableDeleteShortcuts } from './TableDeleteShortcuts'
+import { TableMove } from './TableMove'
 import TableContextMenu, { type TableContextMenuPosition } from './TableContextMenu'
 import { SearchAndReplace } from './SearchAndReplace'
 import { SlashCommand } from './SlashCommand'
@@ -346,6 +347,9 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       // Backspace/Delete removes an *empty* table. Upstream only handles the
       // all-cells-selected case, which left a table hard to get rid of.
       TableDeleteShortcuts,
+      // Row/column reordering. prosemirror-tables ships no reorder operation, so
+      // the swap is hand-written and refuses any move that would tear a merge.
+      TableMove,
       // Find & replace. 飞书 and Google Docs both have it; its absence here was
       // conspicuous.
       SearchAndReplace,

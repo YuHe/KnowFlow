@@ -106,6 +106,32 @@ export default function TableContextMenu({ editor, position, onClose }: TableCon
       { label: '删除当前列', run: act(() => editor.chain().focus().deleteColumn().run()) },
     ],
     [
+      // Reordering. 飞书 and Notion do this by dragging a grip; a one-step move is
+      // the same operation with a target you cannot miss, and it is the only form
+      // whose behaviour around merged cells can be stated precisely — each item
+      // greys out exactly when the swap would tear a merged cell.
+      {
+        label: '上移一行',
+        run: act(() => editor.chain().focus().moveRowUp().run()),
+        enabled: () => editor.can().moveRowUp(),
+      },
+      {
+        label: '下移一行',
+        run: act(() => editor.chain().focus().moveRowDown().run()),
+        enabled: () => editor.can().moveRowDown(),
+      },
+      {
+        label: '左移一列',
+        run: act(() => editor.chain().focus().moveColumnLeft().run()),
+        enabled: () => editor.can().moveColumnLeft(),
+      },
+      {
+        label: '右移一列',
+        run: act(() => editor.chain().focus().moveColumnRight().run()),
+        enabled: () => editor.can().moveColumnRight(),
+      },
+    ],
+    [
       {
         label: '合并 / 拆分单元格',
         run: act(() => editor.chain().focus().mergeOrSplit().run()),
