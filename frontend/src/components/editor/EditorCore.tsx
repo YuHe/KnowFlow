@@ -10,6 +10,7 @@ import Table from '@tiptap/extension-table'
 import { ResizableTableRow } from './TableRowHeight'
 import { TableColumnWidth, TABLE_CELL_MIN_WIDTH } from './TableColumnWidth'
 import { TableDeleteShortcuts } from './TableDeleteShortcuts'
+import TableContextMenu, { type TableContextMenuPosition } from './TableContextMenu'
 import { TrailingNode } from './TrailingNode'
 import { StyledTableCell, StyledTableHeader } from './TableCellAttributes'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
@@ -21,6 +22,7 @@ import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import TextAlign from '@tiptap/extension-text-align'
 import { Extension } from '@tiptap/core'
+import { TextSelection } from '@tiptap/pm/state'
 import { createLowlight, common } from 'lowlight'
 import TurndownService from 'turndown'
 import * as turndownPluginGfm from 'turndown-plugin-gfm'
@@ -215,6 +217,8 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   // paste looks like it did nothing at all.
   const [uploadingImage, setUploadingImage] = useState(false)
   // A pasted standalone HTML document awaiting the user's choice.
+  // Right-click table menu, positioned at the pointer.
+  const [tableMenu, setTableMenu] = useState<TableContextMenuPosition | null>(null)
   const [htmlPrompt, setHtmlPrompt] = useState<{
     text: string
     canBecomeDocument: boolean
@@ -418,6 +422,35 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
 
         return false
       },
+      handleDOMEvents: {
+        /**
+         * Open the table menu on right-click.
+         *
+         * The caret is moved into the cell that was clicked first: the commands
+         * the menu runs all act on the current selection, and a right-click does
+         * not reliably move the selection on its own.
+         */
+        contextmenu(view, event) {
+          if (!view.editable) return false
+          const target = event.target
+          if (!(target instanceof HTMLElement)) return false
+          if (!target.closest('td, th')) return false
+
+          const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+          if (coords) {
+            const { tr } = view.state
+            try {
+              view.dispatch(tr.setSelection(TextSelection.near(view.state.doc.resolve(coords.pos))))
+            } catch {
+              // A resolve failure just means we keep whatever selection existed.
+            }
+          }
+
+          event.preventDefault()
+          setTableMenu({ x: event.clientX, y: event.clientY })
+          return true
+        },
+      },
       handleDrop(view, event, _slice, moved) {
         if (!moved && event.dataTransfer?.files?.length) {
           const file = event.dataTransfer.files[0]
@@ -558,6 +591,9 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
   return (
     <div className="relative">
       <FailedImagesNotice images={mdFailures} onDismiss={() => setMdFailures([])} />
+      {tableMenu && editor && (
+        <TableContextMenu editor={editor} position={tableMenu} onClose={() => setTableMenu(null)} />
+      )}
       {/* Pasted/dropped images upload before they can be inserted. Without this
           the paste looks like it silently did nothing. */}
       {uploadingImage && (
