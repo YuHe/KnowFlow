@@ -21,7 +21,7 @@ import CommentPanel from '@/components/doc/CommentPanel';
 import SharePanel from '@/components/doc/SharePanel';
 import VersionList from '@/components/doc/VersionList';
 import ExportMenu from '@/components/doc/ExportMenu';
-import { ROLE_LEVELS } from '@/types';
+import { ROLE_LEVELS, DOC_CONTENT_MAX_WIDTH, HTML_DOC_MAX_WIDTH } from '@/types';
 import { toast } from '@/components/ui/use-toast';
 import { copyToClipboard, getApiErrorMessage } from '@/utils';
 import { useTreeStore } from '@/store/treeStore';
@@ -498,7 +498,10 @@ const DocReadPage: React.FC = () => {
         <div className="flex-1 overflow-y-auto py-8 px-4">
           <div
             className="mx-auto bg-white shadow-md rounded-sm"
-            style={{ maxWidth: 1100, zoom: zoom / 100 }}
+            style={{
+              maxWidth: isHtmlDoc ? HTML_DOC_MAX_WIDTH : DOC_CONTENT_MAX_WIDTH,
+              zoom: zoom / 100,
+            }}
           >
             <div className="px-16 py-12">
               {pendingDraft && (
@@ -706,7 +709,10 @@ const DocReadPage: React.FC = () => {
         <div className="flex-1 overflow-hidden flex">
           {/* Doc Content */}
           <div className="flex-1 overflow-y-auto" ref={contentRef}>
-            <div className="max-w-3xl mx-auto px-8 py-10">
+            <div
+              className="mx-auto px-12 py-10"
+              style={{ maxWidth: isHtmlDoc ? HTML_DOC_MAX_WIDTH : DOC_CONTENT_MAX_WIDTH }}
+            >
               <h1 className="text-3xl font-bold text-gray-900 mb-4">{currentDoc.title || '无标题'}</h1>
 
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 mb-6 pb-6 border-b border-gray-200">

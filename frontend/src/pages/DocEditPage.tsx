@@ -1,3 +1,4 @@
+import { DOC_CONTENT_MAX_WIDTH } from '@/types'
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Editor } from '@tiptap/react';
@@ -137,7 +138,7 @@ const DocEditPage: React.FC = () => {
         <div
           className="mx-auto bg-white shadow-md rounded-sm"
           style={{
-            maxWidth: 1100,
+            maxWidth: DOC_CONTENT_MAX_WIDTH,
             zoom: zoom / 100,
           }}
         >

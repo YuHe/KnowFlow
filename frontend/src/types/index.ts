@@ -29,6 +29,25 @@ export type SystemRole = 'user' | 'super_admin'
  */
 export type ContentFormat = 'richtext' | 'html'
 
+/**
+ * Width of the document content column, in px.
+ *
+ * Shared by the read view, the editor "paper" and the share/public pages so they
+ * cannot drift: the read view used to be `max-w-3xl` (768px) while the editor was
+ * 1100px, so a document visibly narrowed the moment you stopped editing it.
+ */
+export const DOC_CONTENT_MAX_WIDTH = 1100
+
+/**
+ * Width cap for a standalone HTML document.
+ *
+ * A report lays itself out — it brings its own sidebar, grid and breakpoints —
+ * so constraining it to the prose column wastes most of the pane and triggers
+ * its narrow-screen media queries. Still capped so it does not sprawl on an
+ * ultrawide display.
+ */
+export const HTML_DOC_MAX_WIDTH = 1600
+
 // Auth field rules, shared by every form that sets one of these values
 // (RegisterPage, ProfilePage). They mirror backend/app/schemas/auth.py — keep
 // them in sync: anything a form accepts but the schema rejects surfaces only as

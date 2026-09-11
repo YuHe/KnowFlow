@@ -1,3 +1,4 @@
+import { DOC_CONTENT_MAX_WIDTH, HTML_DOC_MAX_WIDTH } from '@/types'
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { markdownToHtml } from '@/utils/markdown'
@@ -271,7 +272,11 @@ const SharedDocPage: React.FC = () => {
       <LogoBar />
 
       {/* Doc content */}
-      <div ref={contentRef} className="flex-1 w-full max-w-3xl mx-auto px-8 py-10">
+      <div
+        ref={contentRef}
+        className="flex-1 w-full mx-auto px-12 py-10"
+        style={{ maxWidth: doc.content_format === 'html' ? HTML_DOC_MAX_WIDTH : DOC_CONTENT_MAX_WIDTH }}
+      >
         <h1 className="text-3xl font-bold text-gray-900 mb-4">{doc.title || '无标题'}</h1>
 
         {/* Meta info */}

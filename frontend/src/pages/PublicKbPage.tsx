@@ -1,3 +1,4 @@
+import { DOC_CONTENT_MAX_WIDTH, HTML_DOC_MAX_WIDTH } from '@/types'
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../api/client';
@@ -132,7 +133,11 @@ const PublicKbPage: React.FC = () => {
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
           {selectedDoc ? (
-            <div className="max-w-3xl mx-auto px-8 py-10" ref={contentRef}>
+            <div
+              className="mx-auto px-12 py-10"
+              style={{ maxWidth: selectedDoc.content_format === 'html' ? HTML_DOC_MAX_WIDTH : DOC_CONTENT_MAX_WIDTH }}
+              ref={contentRef}
+            >
               <h1 className="text-3xl font-bold text-gray-900 mb-4">{selectedDoc.title || '无标题'}</h1>
               <hr className="border-gray-200 mb-6" />
               {/* Shared with the authenticated read view so mermaid rendering,
