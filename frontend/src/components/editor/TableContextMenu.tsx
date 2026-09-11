@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
+import { CELL_FILL_COLORS } from './palettes'
 
 /**
  * Right-click menu for tables.
@@ -34,18 +35,6 @@ interface MenuItem {
   enabled?: () => boolean
   danger?: boolean
 }
-
-const CELL_FILL_COLORS = [
-  { label: '无填充', value: '' },
-  { label: '灰', value: '#f3f4f6' },
-  { label: '红', value: '#fee2e2' },
-  { label: '橙', value: '#ffedd5' },
-  { label: '黄', value: '#fef9c3' },
-  { label: '绿', value: '#dcfce7' },
-  { label: '青', value: '#cffafe' },
-  { label: '蓝', value: '#dbeafe' },
-  { label: '紫', value: '#f3e8ff' },
-]
 
 const VERTICAL_ALIGNMENTS = [
   { label: '顶端对齐', value: 'top' },
@@ -174,7 +163,7 @@ export default function TableContextMenu({ editor, position, onClose }: TableCon
 
       <div className="border-t border-gray-100 mt-1 pt-1.5">
         <p className="px-3 pb-1 text-xs text-gray-400">单元格填充</p>
-        <div className="grid grid-cols-5 gap-1 px-3 pb-1.5">
+        <div className="grid grid-cols-6 gap-1 px-3 pb-1.5">
           {CELL_FILL_COLORS.map((color) => (
             <button
               key={color.value}

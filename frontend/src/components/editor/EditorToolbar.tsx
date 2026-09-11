@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import { FONT_SIZES } from './FontSize'
+import { TEXT_COLORS, HIGHLIGHT_COLORS, CELL_FILL_COLORS } from './palettes'
 
 interface EditorToolbarProps {
   editor: Editor
@@ -218,7 +219,7 @@ const Swatches: React.FC<{
   colors: { label: string; value: string }[]
   onPick: (value: string) => void
 }> = ({ colors, onPick }) => (
-  <div className="grid grid-cols-5 gap-1 px-3 pb-1">
+  <div className="grid grid-cols-6 gap-1 px-3 pb-1">
     {colors.map((color) => (
       <Tooltip key={color.value} label={color.label}>
         <button
@@ -250,48 +251,6 @@ const HEADING_OPTIONS = [
 const HEADING_FONT_SIZES: Record<number, string> = {
   0: '14px', 1: '28px', 2: '22px', 3: '18px', 4: '16px', 5: '14px', 6: '13px',
 }
-
-const TEXT_COLORS = [
-  { label: '默认', value: '' },
-  { label: '红色', value: '#ef4444' },
-  { label: '橙色', value: '#f97316' },
-  { label: '黄色', value: '#eab308' },
-  { label: '绿色', value: '#22c55e' },
-  { label: '青色', value: '#06b6d4' },
-  { label: '蓝色', value: '#3b82f6' },
-  { label: '紫色', value: '#a855f7' },
-  { label: '粉色', value: '#ec4899' },
-  { label: '灰色', value: '#6b7280' },
-  { label: '深灰', value: '#374151' },
-  { label: '棕色', value: '#92400e' },
-]
-
-const HIGHLIGHT_COLORS = [
-  { label: '无', value: '' },
-  { label: '黄色', value: '#fef08a' },
-  { label: '绿色', value: '#bbf7d0' },
-  { label: '蓝色', value: '#bfdbfe' },
-  { label: '粉色', value: '#fbcfe8' },
-  { label: '紫色', value: '#e9d5ff' },
-  { label: '橙色', value: '#fed7aa' },
-  { label: '红色', value: '#fecaca' },
-  { label: '青色', value: '#a5f3fc' },
-]
-
-// Deliberately paler than HIGHLIGHT_COLORS: a highlight sits behind a few words,
-// a cell fill sits behind a whole block, so it has to stay readable. 飞书 and
-// Notion both ship a fixed palette rather than a colour picker.
-const CELL_FILL_COLORS = [
-  { label: '无填充', value: '' },
-  { label: '灰', value: '#f3f4f6' },
-  { label: '红', value: '#fee2e2' },
-  { label: '橙', value: '#ffedd5' },
-  { label: '黄', value: '#fef9c3' },
-  { label: '绿', value: '#dcfce7' },
-  { label: '青', value: '#cffafe' },
-  { label: '蓝', value: '#dbeafe' },
-  { label: '紫', value: '#f3e8ff' },
-]
 
 // Row-height presets. Dragging a row's bottom border does the same thing
 // continuously; this is the keyboard-reachable path and the way to apply one

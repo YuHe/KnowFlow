@@ -137,3 +137,116 @@ describe('TableColumnWidth seeding', () => {
     editor.destroy()
   })
 })
+
+/**
+ * Tables that arrive after the editor exists.
+ *
+ * This is the case the original fix missed, and why the last column became
+ * undraggable again: the page creates the editor before the document has been
+ * fetched and then calls `setContent`, so `onCreate` ran against an empty
+ * document. Every real document went through that path; only the tests above,
+ * which hand the content to the constructor, were covered.
+ */
+describe('seeding tables that arrive later', () => {
+  it('seeds a document loaded with setContent', async () => {
+    const { editor } = mount('<p></p>')
+    await created()
+    editor.commands.setContent(TABLE_HTML)
+    const widths = colwidths(editor)
+    expect(widths).toHaveLength(6)
+    expect(widths.every((w) => w !== null)).toBe(true)
+    editor.destroy()
+  })
+
+  it('gives that table the inline width, not min-width', async () => {
+    const { editor } = mount('<p></p>')
+    await created()
+    editor.commands.setContent(TABLE_HTML)
+    expect(editor.getHTML()).toMatch(/<table[^>]*style="[^"]*width:/)
+    expect(editor.getHTML()).not.toMatch(/<table[^>]*style="[^"]*min-width:/)
+    editor.destroy()
+  })
+
+  it('seeds a table inserted from the toolbar', async () => {
+    const { editor } = mount('<p></p>')
+    await created()
+    editor.commands.insertTable({ rows: 2, cols: 3, withHeaderRow: true })
+    const widths = colwidths(editor)
+    expect(widths).toHaveLength(6)
+    expect(widths.every((w) => w !== null)).toBe(true)
+    editor.destroy()
+  })
+
+  it('seeds a pasted table', async () => {
+    const { editor } = mount('<p>before</p>')
+    await created()
+    editor.commands.insertContentAt(editor.state.doc.content.size - 1, TABLE_HTML)
+    expect(colwidths(editor).every((w) => w !== null)).toBe(true)
+    editor.destroy()
+  })
+
+  it('keeps the insertion itself undoable in one step', async () => {
+    // The seeding transaction must stay out of history, or undo would remove the
+    // widths and leave the table.
+    const { editor } = mount('<p></p>')
+    await created()
+    editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true })
+    editor.commands.undo()
+    expect(editor.getHTML()).not.toContain('<table')
+    editor.destroy()
+  })
+
+  it('leaves a width the user dragged alone', async () => {
+    const { editor } = mount(TABLE_HTML)
+    await created()
+    expect(colwidths(editor)[0]).not.toEqual([321])
+
+    // What a column drag does: prosemirror-tables writes the new width onto
+    // every cell of that column, not just the one under the pointer — setting one
+    // alone would leave the column inconsistent and its own fixTables pass would
+    // undo it.
+    const first: number[] = []
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'tableHeader' || node.type.name === 'tableCell') first.push(pos)
+      return true
+    })
+    const columnZero = [first[0], first[3]]
+    const tr = editor.state.tr
+    for (const pos of columnZero) {
+      const node = editor.state.doc.nodeAt(pos)!
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, colwidth: [321] })
+    }
+    editor.view.dispatch(tr)
+
+    expect(colwidths(editor)[0]).toEqual([321])
+    expect(colwidths(editor)[3]).toEqual([321])
+    editor.destroy()
+  })
+
+  it('does not walk the document on an ordinary keystroke', async () => {
+    // appendTransaction runs on every transaction, so it decides from the steps
+    // whether a table could have arrived. Proof: clear a column's widths through a
+    // transaction that carries no table, then type. If seeding scanned on every
+    // keystroke the widths would come back.
+    const { editor } = mount(TABLE_HTML)
+    await created()
+    const positions: number[] = []
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'tableHeader' || node.type.name === 'tableCell') positions.push(pos)
+      return true
+    })
+    const columnZero = [positions[0], positions[3]]
+    const clear = editor.state.tr
+    for (const pos of columnZero) {
+      const node = editor.state.doc.nodeAt(pos)!
+      clear.setNodeMarkup(pos, undefined, { ...node.attrs, colwidth: null })
+    }
+    editor.view.dispatch(clear)
+    expect(colwidths(editor)[0]).toBeNull()
+
+    editor.commands.insertContentAt(3, 'x')
+    expect(colwidths(editor)[0]).toBeNull()
+    editor.destroy()
+  })
+})
+

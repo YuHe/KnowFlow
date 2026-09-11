@@ -1,5 +1,6 @@
 import { Extension, findParentNode } from '@tiptap/core'
 import { TableMap } from '@tiptap/pm/tables'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
 
@@ -26,7 +27,7 @@ import type { Transaction } from '@tiptap/pm/state'
  */
 
 /** Does any cell in this table lack a usable colwidth? */
-function needsSeeding(table: PMNode): boolean {
+export function needsSeeding(table: PMNode): boolean {
   const map = TableMap.get(table)
   for (let col = 0; col < map.width; col++) {
     const cellPos = map.map[col]
@@ -36,6 +37,57 @@ function needsSeeding(table: PMNode): boolean {
   }
   return false
 }
+
+/**
+ * Seed every table in `doc` that needs it, into `tr`. Returns true if anything
+ * changed.
+ */
+function seedAllTables(
+  tr: Transaction,
+  doc: PMNode,
+  availableWidth: number,
+  cellMinWidth: number,
+): boolean {
+  let changed = false
+  doc.descendants((node, pos) => {
+    if (node.type.name !== 'table') return true
+    if (needsSeeding(node) && seedColumnWidths(tr, node, pos, availableWidth, cellMinWidth)) {
+      changed = true
+    }
+    // Tables do not nest here, and their cells hold nothing that needs seeding.
+    return false
+  })
+  return changed
+}
+
+/**
+ * Could any of these transactions have brought a new table into the document?
+ *
+ * Scanning the whole document on every transaction would mean a walk per
+ * keystroke. A table can only *arrive* inside a replacement's slice, so the steps
+ * answer the question exactly: `setContent`, a paste and `insertTable` all carry
+ * one, while typing carries text. Steps with no slice — `setNodeMarkup`, which is
+ * how a colwidth is written — are treated as "no", which is also what stops this
+ * from re-triggering on its own output.
+ */
+function mayHaveAddedTable(transactions: readonly Transaction[]): boolean {
+  for (const tr of transactions) {
+    if (!tr.docChanged) continue
+    for (const step of tr.steps) {
+      const slice = (step as { slice?: { content: PMNode } }).slice
+      if (!slice) continue
+      let found = false
+      slice.content.descendants((node) => {
+        if (node.type.name === 'table') found = true
+        return !found
+      })
+      if (found) return true
+    }
+  }
+  return false
+}
+
+const seedingKey = new PluginKey('tableColumnWidthSeeding')
 
 /**
  * Write an even colwidth across `table`'s columns into `tr`.
@@ -124,26 +176,56 @@ export const TableColumnWidth = Extension.create<TableColumnWidthOptions>({
     // otherwise their last column stays unresizable forever.
     const { view } = this.editor
     const tr = view.state.tr
-    const available = view.dom.clientWidth || 0
-    let changed = false
-
-    view.state.doc.descendants((node, pos) => {
-      if (node.type.name !== 'table') return true
-      if (needsSeeding(node)) {
-        if (seedColumnWidths(tr, node, pos, available, this.options.cellMinWidth)) {
-          changed = true
-        }
-      }
-      return false
-    })
-
-    if (!changed) return
+    if (!seedAllTables(tr, view.state.doc, view.dom.clientWidth || 0, this.options.cellMinWidth)) {
+      return
+    }
     // Not an edit the user made: keep it out of the undo stack, and out of the
     // dirty/autosave path — the widths it writes are the ones already being
     // rendered, so nothing visibly changes.
     tr.setMeta('addToHistory', false)
     tr.setMeta('preventUpdate', true)
     view.dispatch(tr)
+  },
+
+  addProseMirrorPlugins() {
+    const cellMinWidth = this.options.cellMinWidth
+
+    return [
+      new Plugin({
+        key: seedingKey,
+
+        /**
+         * Seed tables that arrive *after* the editor was created.
+         *
+         * `onCreate` alone was not enough, and that is why the last column went
+         * back to being undraggable. The page creates the editor before the
+         * document has been fetched and then calls `setContent`, so on every real
+         * document `onCreate` ran against an empty doc and every table loaded
+         * afterwards stayed unseeded. A table inserted from the toolbar or pasted
+         * in was never seeded either. Only the tests passed, because they hand the
+         * content to the constructor.
+         *
+         * Without a colwidth on every column, @tiptap/extension-table writes
+         * `min-width` instead of `width` on the <table>, the stylesheet's
+         * `width: 100%` wins under `table-layout: fixed`, and the table's right
+         * edge is pinned to the container — so the last column's handle has
+         * nowhere to move, and dragging a middle border redistributes the
+         * remaining columns instead of resizing one.
+         */
+        appendTransaction: (transactions, _oldState, newState) => {
+          if (!mayHaveAddedTable(transactions)) return null
+          const tr = newState.tr
+          const available = this.editor?.view?.dom?.clientWidth || 0
+          if (!seedAllTables(tr, newState.doc, available, cellMinWidth)) return null
+          // The user's own transaction is already in history and has already
+          // marked the document dirty; this one only fills in widths that match
+          // what is on screen.
+          tr.setMeta('addToHistory', false)
+          tr.setMeta('preventUpdate', true)
+          return tr
+        },
+      }),
+    ]
   },
 
   addCommands() {

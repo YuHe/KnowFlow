@@ -3,6 +3,7 @@ import { renderMermaidBlocks } from '@/utils/mermaid'
 import { attachCodeCopyButtons } from '@/utils/codeCopy'
 import { highlightCodeBlocks } from '@/utils/codeHighlight'
 import { sanitizeForLightDom } from '@/utils/sanitize'
+import { markTableOfContents, repairAnchorLinks } from '@/utils/tableOfContents'
 import HtmlDocumentViewer from '@/components/doc/HtmlDocumentViewer'
 import type { ContentFormat } from '@/types'
 
@@ -24,7 +25,10 @@ export default function DocViewer({ content, containerRef, format = 'richtext' }
   const safeContent = useMemo(() => sanitizeForLightDom(content), [content])
   const isHtmlDocument = format === 'html'
 
-  // Inject id attributes onto headings so OutlinePanel can scroll to them
+  // Inject id attributes onto headings so OutlinePanel can scroll to them, then
+  // give the document's own 目录 — if it has one — something CSS can target and
+  // links that resolve. Ordered: the repair matches links against heading ids, so
+  // the ids have to exist first.
   useEffect(() => {
     if (isHtmlDocument || !containerRef.current) return
     const headings = containerRef.current.querySelectorAll('h1, h2, h3')
@@ -33,6 +37,8 @@ export default function DocViewer({ content, containerRef, format = 'richtext' }
         el.id = `heading-${i}`
       }
     })
+    markTableOfContents(containerRef.current)
+    repairAnchorLinks(containerRef.current)
   }, [safeContent, containerRef, isHtmlDocument])
 
   // Render mermaid diagrams after content updates.

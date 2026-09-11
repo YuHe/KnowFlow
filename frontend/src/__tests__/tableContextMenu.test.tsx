@@ -10,6 +10,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import React from 'react'
 import TableContextMenu from '@/components/editor/TableContextMenu'
+import { CELL_FILL_COLORS } from '@/components/editor/palettes'
+
+const BLUE_FILL = CELL_FILL_COLORS.find((c) => c.label === '蓝')!.value
 
 /** Minimal editor stand-in: records the command chain that was invoked. */
 function makeEditor() {
@@ -152,7 +155,9 @@ describe('running a command', () => {
     const { editor, calls } = makeEditor()
     render(<TableContextMenu editor={editor} position={POSITION} onClose={vi.fn()} />)
     fireEvent.click(screen.getByTitle('蓝'))
-    expect(calls.some((c) => c.startsWith('setCellAttribute') && c.includes('#dbeafe'))).toBe(true)
+    // The value comes from the shared palette, so the assertion reads it from
+    // there rather than repeating a hex that would then drift.
+    expect(calls.some((c) => c.startsWith('setCellAttribute') && c.includes(BLUE_FILL))).toBe(true)
   })
 
   it('clears the fill with null rather than an empty string', () => {
