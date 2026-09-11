@@ -1,4 +1,4 @@
-import { Extension } from '@tiptap/core'
+import { Extension, findParentNode } from '@tiptap/core'
 import { TableMap } from '@tiptap/pm/tables'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
@@ -81,6 +81,25 @@ export function seedColumnWidths(
   return changed
 }
 
+/**
+ * Drop every colwidth in the table, so seeding recomputes all of them.
+ *
+ * seedColumnWidths skips a cell whose width already matches what it would write;
+ * to *re*-distribute we have to clear first, or a table that is only slightly
+ * lopsided would be left alone.
+ */
+function clearColumnWidths(tr: Transaction, table: PMNode, tablePos: number): void {
+  const map = TableMap.get(table)
+  const seen = new Set<number>()
+  for (const cellPos of map.map) {
+    if (seen.has(cellPos)) continue
+    seen.add(cellPos)
+    const cell = table.nodeAt(cellPos)
+    if (!cell || !cell.attrs.colwidth) continue
+    tr.setNodeMarkup(tablePos + 1 + cellPos, undefined, { ...cell.attrs, colwidth: null })
+  }
+}
+
 export interface TableColumnWidthOptions {
   /** Mirrors Table.configure({ cellMinWidth }). */
   cellMinWidth: number
@@ -126,6 +145,43 @@ export const TableColumnWidth = Extension.create<TableColumnWidthOptions>({
     tr.setMeta('preventUpdate', true)
     view.dispatch(tr)
   },
+
+  addCommands() {
+    return {
+      /**
+       * Give every column of the table containing the selection an equal width.
+       *
+       * 飞书 calls this 均分列宽 and reaches for it constantly, because dragging
+       * one border inevitably leaves the rest lopsided — and until now a botched
+       * drag could only be undone. Unlike seeding on load, this IS a user edit,
+       * so it goes through history normally.
+       */
+      distributeTableColumns:
+        () =>
+        ({ state, tr, dispatch, editor }) => {
+          const found = findParentNode((node) => node.type.name === 'table')(state.selection)
+          if (!found) return false
+          if (!dispatch) return true
+
+          const available = editor.view.dom.clientWidth || 0
+          // Force a rewrite even where a column already happens to be even.
+          clearColumnWidths(tr, found.node, found.pos)
+          const table = tr.doc.nodeAt(found.pos)
+          if (!table) return false
+          seedColumnWidths(tr, table, found.pos, available, this.options.cellMinWidth)
+          return true
+        },
+    }
+  },
 })
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    tableColumnWidth: {
+      /** Equalise the column widths of the table containing the selection. */
+      distributeTableColumns: () => ReturnType
+    }
+  }
+}
 
 export default TableColumnWidth

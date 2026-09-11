@@ -11,8 +11,7 @@ import { ResizableTableRow } from './TableRowHeight'
 import { TableColumnWidth, TABLE_CELL_MIN_WIDTH } from './TableColumnWidth'
 import { TableDeleteShortcuts } from './TableDeleteShortcuts'
 import { TrailingNode } from './TrailingNode'
-import TableHeader from '@tiptap/extension-table-header'
-import TableCell from '@tiptap/extension-table-cell'
+import { StyledTableCell, StyledTableHeader } from './TableCellAttributes'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
@@ -323,8 +322,10 @@ export default function EditorCore({ content, kbId, docId, onEditorReady, onUpda
       }),
       Table.configure({ resizable: true, cellMinWidth: TABLE_CELL_MIN_WIDTH }),
       ResizableTableRow,
-      TableHeader,
-      TableCell,
+      // Cell background colour and vertical alignment; stock TableCell/TableHeader
+      // have neither, and setCellAttribute had no attributes to write to.
+      StyledTableHeader,
+      StyledTableCell,
       // Seeds colwidth so the table is fixed-width from the first render; the
       // last column is otherwise pinned to the container and undraggable.
       TableColumnWidth.configure({ cellMinWidth: TABLE_CELL_MIN_WIDTH }),

@@ -131,6 +131,27 @@ const HIGHLIGHT_COLORS = [
   { label: '青色', value: '#a5f3fc' },
 ]
 
+// Cell fill palette. Deliberately paler than HIGHLIGHT_COLORS: a highlight sits
+// behind a few words, a cell fill sits behind a whole block, so it has to stay
+// readable. 飞书 and Notion both ship a fixed palette rather than a colour picker.
+const CELL_FILL_COLORS = [
+  { label: '无填充', value: '' },
+  { label: '灰', value: '#f3f4f6' },
+  { label: '红', value: '#fee2e2' },
+  { label: '橙', value: '#ffedd5' },
+  { label: '黄', value: '#fef9c3' },
+  { label: '绿', value: '#dcfce7' },
+  { label: '青', value: '#cffafe' },
+  { label: '蓝', value: '#dbeafe' },
+  { label: '紫', value: '#f3e8ff' },
+]
+
+const VERTICAL_ALIGN_OPTIONS: { label: string; value: 'top' | 'middle' | 'bottom' }[] = [
+  { label: '顶端对齐', value: 'top' },
+  { label: '垂直居中', value: 'middle' },
+  { label: '底端对齐', value: 'bottom' },
+]
+
 // Presets for the row-height menu. Dragging a row's bottom border does the same
 // thing continuously; this is the keyboard-reachable path and the way to apply
 // one height to several rows at once (select cells across them first).
@@ -154,6 +175,7 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const [showHeading, setShowHeading] = useState(false)
   const [showImageMenu, setShowImageMenu] = useState(false)
   const [showRowHeight, setShowRowHeight] = useState(false)
+  const [showCellFill, setShowCellFill] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const colorPickerRef = useRef<HTMLDivElement>(null)
@@ -161,10 +183,11 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
   const headingRef = useRef<HTMLDivElement>(null)
   const imageMenuRef = useRef<HTMLDivElement>(null)
   const rowHeightRef = useRef<HTMLDivElement>(null)
+  const cellFillRef = useRef<HTMLDivElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight) return
+    if (!showColorPicker && !showHighlightPicker && !showHeading && !showImageMenu && !showRowHeight && !showCellFill) return
     const handle = (e: MouseEvent) => {
       if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setShowColorPicker(false)
@@ -181,10 +204,13 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
       if (showRowHeight && rowHeightRef.current && !rowHeightRef.current.contains(e.target as Node)) {
         setShowRowHeight(false)
       }
+      if (showCellFill && cellFillRef.current && !cellFillRef.current.contains(e.target as Node)) {
+        setShowCellFill(false)
+      }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight])
+  }, [showColorPicker, showHighlightPicker, showHeading, showImageMenu, showRowHeight, showCellFill])
 
   if (!editor) return null
 
@@ -719,6 +745,72 @@ export default function EditorToolbar({ editor, zoom = 100, onZoomChange, source
           >
             <span className="text-xs font-medium">表头列</span>
           </ToolbarButton>
+
+          {/* Distribute columns evenly — 飞书's 均分列宽. Dragging one border
+              inevitably leaves the rest lopsided, and until now a botched drag
+              could only be undone. */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().distributeTableColumns().run()}
+            title="均分列宽"
+          >
+            <span className="text-xs font-medium">均分</span>
+          </ToolbarButton>
+
+          {/* Cell fill colour — 飞书/Notion both have this; stock TipTap has no
+              attribute for it, see TableCellAttributes. */}
+          <div className="relative" ref={cellFillRef}>
+            <button
+              type="button"
+              onClick={() => setShowCellFill((v) => !v)}
+              title="单元格填充色"
+              className={`h-7 px-1.5 flex items-center gap-1 rounded text-xs transition ${
+                showCellFill ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <span className="w-3.5 h-3.5 rounded border border-gray-300" style={{ backgroundColor: '#dbeafe' }} />
+              填充
+            </button>
+            {showCellFill && (
+              <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-44">
+                <p className="text-xs text-gray-400 mb-1.5 px-1">单元格填充</p>
+                <div className="grid grid-cols-4 gap-1">
+                  {CELL_FILL_COLORS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      title={c.label}
+                      onClick={() => {
+                        editor
+                          .chain()
+                          .focus()
+                          .setCellAttribute('backgroundColor', c.value || null)
+                          .run()
+                        setShowCellFill(false)
+                      }}
+                      className="w-8 h-8 rounded border border-gray-200 hover:scale-110 transition-transform flex items-center justify-center"
+                      style={{ backgroundColor: c.value || '#ffffff' }}
+                    >
+                      {!c.value && <span className="text-xs text-gray-400">✕</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Vertical alignment. Horizontal alignment is the existing TextAlign
+              buttons acting on the cell's paragraph — one mechanism, not two. */}
+          {VERTICAL_ALIGN_OPTIONS.map((option) => (
+            <ToolbarButton
+              key={option.value}
+              onClick={() => editor.chain().focus().setCellAttribute('verticalAlign', option.value).run()}
+              title={option.label}
+            >
+              <span className="text-xs leading-none">
+                {option.value === 'top' ? '⌜' : option.value === 'middle' ? '⌷' : '⌞'}
+              </span>
+            </ToolbarButton>
+          ))}
 
           {/* Row height — presets; the same value can also be set by dragging a
               row's bottom border in the editor. */}

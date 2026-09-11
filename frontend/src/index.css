@@ -313,6 +313,16 @@
 
   .ProseMirror table th {
     @apply bg-muted font-semibold;
+    /* Sticky header row.
+       Works here only because .tableWrapper below has a max-height: its
+       `overflow-x: auto` makes the computed `overflow-y` auto too (CSS overflow
+       spec), so the wrapper — not the page — is the scrollport for anything
+       sticky inside it. Without a height cap the wrapper never scrolls
+       vertically and the header simply rides away with the content. Measured in
+       Chrome, not assumed. */
+    position: sticky;
+    top: 0;
+    z-index: 2;
   }
 
   /* Table column-resize handle (drag right border of a column to resize).
@@ -379,6 +389,10 @@
 
   .ProseMirror .tableWrapper {
     overflow-x: auto;
+    /* Height cap so a tall table gets its own vertical scrollport, which is what
+       makes the sticky header row above actually stick. Self-limiting: a table
+       shorter than this is unaffected and still flows with the page. */
+    max-height: 70vh;
     margin: 1rem 0;
   }
 
@@ -548,7 +562,15 @@
     @apply border border-border px-2 py-1 text-left align-top;
     line-height: 1.5;
   }
-  .doc-content table th { @apply bg-muted font-semibold; }
+  .doc-content table th {
+    @apply bg-muted font-semibold;
+    /* No wrapper here, so the page is the scrollport and this sticks to the top
+       of the reading pane — the behaviour 飞书 treats as the point of marking a
+       header row. */
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
   .doc-content table tr:hover td { @apply bg-muted/30; }
 
   .doc-content mark { @apply bg-yellow-200 text-yellow-900 px-0.5 rounded; }
